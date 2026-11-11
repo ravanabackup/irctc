@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>IRCTC Tatkal Express Simulator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b365d'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='%23f59e0b' stroke-width='3'/%3E%3Cpath d='M20 38h24l-2-14a4 4 0 0 0-4-3H26a4 4 0 0 0-4 3l-2 14zm4 4h4m12 0h4M25 27h14v6H25z' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } };
+</script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+body{font-family:'Inter',sans-serif;overflow-x:hidden}
+.font-mono,.tabular-nums{font-variant-numeric:tabular-nums}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+@keyframes scanLaser{0%{top:8%;opacity:.7}50%{top:88%;opacity:1}100%{top:8%;opacity:.7}}
+@keyframes tatkalPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.45),0 0 24px rgba(245,158,11,.25)}50%{box-shadow:0 0 0 10px rgba(245,158,11,0),0 0 36px rgba(245,158,11,.45)}}
+@keyframes urgentPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 10px rgba(239,68,68,0)}}
+@keyframes slideUp{from{transform:translateY(100%);opacity:.6}to{transform:translateY(0);opacity:1}}
+@keyframes popIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes flashBadge{0%{transform:scale(1)}30%{transform:scale(1.06);filter:brightness(1.25)}100%{transform:scale(1)}}
+.animate-shake{animation:shake .36s cubic-bezier(.36,.07,.19,.97) both}
+.animate-scan-laser{animation:scanLaser 2.2s ease-in-out infinite}
+.animate-tatkal-pulse{animation:tatkalPulse 1.5s infinite}
+.animate-urgent-pulse{animation:urgentPulse 1.1s infinite}
+.animate-slide-up{animation:slideUp .26s cubic-bezier(.16,1,.3,1) forwards}
+.animate-pop-in{animation:popIn .2s cubic-bezier(.16,1,.3,1) forwards}
+.animate-flash-badge{animation:flashBadge .4s ease-out}
+.btn-tactile{transition:transform .12s ease,box-shadow .15s ease,background-color .15s ease}
+.btn-tactile:active:not(:disabled){transform:scale(.97)}
+::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(148,163,184,.3);border-radius:9999px}::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.5)}
+input[type=date]::-webkit-calendar-picker-indicator{cursor:pointer}
+</style>
+</head>
+<body class="antialiased selection:bg-amber-500/30">
+<div class="pointer-events-none fixed inset-0 overflow-hidden" style="z-index:0">
+<div class="absolute -top-32 left-1/4 h-96 w-96 rounded-full bg-[#1b365d]/15 blur-3xl dark:bg-[#1b365d]/35"></div>
+<div class="absolute right-1/5 bottom-0 h-80 w-80 rounded-full bg-amber-500/10 blur-3xl"></div>
+</div>
+<div id="root" class="relative min-h-screen flex flex-col bg-slate-100 text-slate-900 dark:bg-[#070d18] dark:text-slate-100 transition-colors" style="z-index:10">
+<header id="topbar" class="sticky top-0 z-40"></header>
+<main id="main" class="flex-1"></main>
+<footer class="border-t border-slate-200/70 bg-white/50 px-4 py-3 text-center text-[11px] text-slate-500 backdrop-blur-sm dark:border-slate-800/80 dark:bg-[#080e1a]/70 dark:text-slate-400">IRCTC Tatkal Express Simulator &bull; Single-File Edition (HTML5 + Tailwind CDN + ES6 + Lucide CDN) &bull; Training simulation only — not affiliated with IRCTC / Indian Railways</footer>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<div id="push-root"></div>
+
+<script>
+/* ============================================================
+   IRCTC TATKAL EXPRESS SIMULATOR — SINGLE FILE EDITION
+   Vanilla ES6 + Tailwind CDN + Lucide CDN. No backend needed.
+   Screens: A Login | B Search | C Trains | D Passenger Gauntlet
+            | E Payment Gateway | F PNR Result
+============================================================ */
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const inr0 = (n) => Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+const inr2 = (n) => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pad2 = (n) => String(n).padStart(2,'0');
+function refreshIcons(){ try{ if(window.lucide) lucide.createIcons(); }catch(e){} }
+
+/* ---------------- SOUND ENGINE (Web Audio synth, no files) ---------------- */
+const Sound = {
+  ctx:null, enabled:true,
+  ac(){ if(!this.enabled||typeof window==='undefined') return null;
+    try{
+      if(!this.ctx){ const AC=window.AudioContext||window.webkitAudioContext; if(AC) this.ctx=new AC(); }
+      if(this.ctx&&this.ctx.state==='suspended') this.ctx.resume().catch(()=>{});
+      return this.ctx;
+    }catch(e){ return null; } },
+  tone(freq,dur,type,vol,delay,slide){ const ctx=this.ac(); if(!ctx) return;
+    try{ const now=ctx.currentTime+(delay||0); const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type=type||'sine'; o.frequency.setValueAtTime(freq,now);
+      if(slide) o.frequency.exponentialRampToValueAtTime(slide,now+dur);
+      g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(vol||0.07,now+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,now+dur);
+      o.connect(g); g.connect(ctx.destination); o.start(now); o.stop(now+dur+0.03);
+    }catch(e){} },
+  click(){ this.tone(620,.045,'triangle',.05,0,420); },
+  tick(){ this.tone(880,.035,'sine',.035); },
+  urgentTick(){ this.tone(1180,.06,'square',.04,0,960); },
+  tatkalOpen(){ this.tone(587.33,.14,'triangle',.08,0); this.tone(880,.22,'triangle',.09,.09); this.tone(1174.66,.3,'sine',.08,.19); },
+  error(){ this.tone(210,.14,'sawtooth',.07,0,150); this.tone(170,.18,'sawtooth',.07,.12,120); },
+  serverBusy(){ this.tone(460,.09,'square',.05,0); this.tone(340,.16,'square',.05,.1); },
+  notify(){ this.tone(987.77,.1,'sine',.07,0); this.tone(1318.51,.22,'sine',.08,.08); },
+  success(){ this.tone(523.25,.18,'triangle',.09,0); this.tone(659.25,.18,'triangle',.09,.14); this.tone(783.99,.18,'triangle',.09,.28); this.tone(1046.5,.48,'sine',.11,.42); this.tone(523.25,.45,'sine',.05,.42); this.tone(783.99,.45,'sine',.05,.42); },
+  fail(){ this.tone(330,.2,'sawtooth',.06,0,290); this.tone(260,.24,'sawtooth',.06,.18,220); this.tone(185,.4,'sawtooth',.07,.38,130); }
+};
+
+/* ---------------- STATIC RAILWAY DATA ---------------- */
+const STATIONS=[
+{code:'NDLS',name:'New Delhi',city:'New Delhi',state:'Delhi',zone:'NR'},
+{code:'CSMT',name:'Chhatrapati Shivaji Maharaj Terminus',city:'Mumbai',state:'Maharashtra',zone:'CR'},
+{code:'MMCT',name:'Mumbai Central',city:'Mumbai',state:'Maharashtra',zone:'WR'},
+{code:'HWH',name:'Howrah Jn',city:'Kolkata',state:'West Bengal',zone:'ER'},
+{code:'SBC',name:'KSR Bengaluru City Jn',city:'Bengaluru',state:'Karnataka',zone:'SWR'},
+{code:'MAS',name:'MGR Chennai Central',city:'Chennai',state:'Tamil Nadu',zone:'SR'},
+{code:'CDG',name:'Chandigarh Jn',city:'Chandigarh',state:'Chandigarh',zone:'NR'},
+{code:'BPL',name:'Bhopal Jn',city:'Bhopal',state:'Madhya Pradesh',zone:'WCR'},
+{code:'PNBE',name:'Patna Jn',city:'Patna',state:'Bihar',zone:'ECR'},
+{code:'LKO',name:'Lucknow Charbagh NR',city:'Lucknow',state:'Uttar Pradesh',zone:'NR'},
+{code:'JP',name:'Jaipur Jn',city:'Jaipur',state:'Rajasthan',zone:'NWR'},
+{code:'ADI',name:'Ahmedabad Jn',city:'Ahmedabad',state:'Gujarat',zone:'WR'},
+{code:'PUNE',name:'Pune Jn',city:'Pune',state:'Maharashtra',zone:'CR'},
+{code:'SC',name:'Secunderabad Jn',city:'Hyderabad',state:'Telangana',zone:'SCR'},
+{code:'CNB',name:'Kanpur Central',city:'Kanpur',state:'Uttar Pradesh',zone:'NCR'},
+{code:'BZA',name:'Vijayawada Jn',city:'Vijayawada',state:'Andhra Pradesh',zone:'SCR'},
+{code:'GHY',name:'Guwahati',city:'Guwahati',state:'Assam',zone:'NFR'},
+{code:'ERS',name:'Ernakulam Jn',city:'Kochi',state:'Kerala',zone:'SR'}];
+const POPULAR=[{from:'NDLS',to:'CSMT',tag:'Rajdhani Corridor'},{from:'NDLS',to:'HWH',tag:'Howrah Trunk'},{from:'NDLS',to:'CDG',tag:'Shatabdi Express'},{from:'NDLS',to:'BPL',tag:'Vande Bharat'},{from:'CSMT',to:'SBC',tag:'Udyan Express'},{from:'SBC',to:'MAS',tag:'Southern Shatabdi'}];
+const QUOTA={GN:{label:'GENERAL (GN)',short:'General',desc:'Standard booking up to 60 days ahead.',badge:'Standard'},CK:{label:'TATKAL (CK)',short:'Tatkal',desc:'Opens 10:00 AM (AC) & 11:00 AM (SL) 1 day prior.',badge:'High Rush'},LD:{label:'LADIES (LD)',short:'Ladies',desc:'Reserved for female passengers & children under 12.',badge:'Priority'},SS:{label:'LOWER BERTH / SR. CITIZEN (SS)',short:'Sr. Citizen',desc:'For Male 60+ and Female 45+ passengers.',badge:'Concession'}};
+const DIFF={NORMAL:{label:'Practice Mode',sub:'120s timer • Gentle queue drain • 1 server hiccup',sec:120,drain:4200,hic:1,rival:48},RUSH:{label:'10:00 AM Tatkal Rush',sub:'120s timer • Real Tatkal drain • 1–2 server retries',sec:120,drain:2400,hic:1,rival:26},HARDCORE:{label:'Hardcore Tatkal Chaos',sub:'90s timer • Brutal berth drain • 2 server retries',sec:90,drain:1400,hic:2,rival:16}};
+const CLASS_LABELS={'1A':'AC First Class (1A)','2A':'AC 2 Tier (2A)','3A':'AC 3 Tier (3A)',SL:'Sleeper (SL)',CC:'AC Chair Car (CC)'};
+const BANKS=[{id:'SBI',name:'State Bank of India (SBI)',tag:'Most Popular'},{id:'HDFC',name:'HDFC Bank NetBanking',tag:'Fast OTP'},{id:'ICICI',name:'ICICI Bank Retail',tag:'Instant'},{id:'AXIS',name:'Axis Bank NetBanking',tag:'Reliable'},{id:'KOTAK',name:'Kotak Mahindra Bank',tag:'Direct'}];
+const CURATED=[
+{no:'12951',nm:'Mumbai Tejas Rajdhani Express',ty:'RAJDHANI',rt:[['NDLS','CSMT'],['NDLS','MMCT'],['NDLS','BPL'],['BPL','CSMT'],['BPL','MMCT']],dep:'16:55',dur:935,km:1384,cl:['1A','2A','3A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12953',nm:'August Kranti Tejas Rajdhani',ty:'RAJDHANI',rt:[['NDLS','CSMT'],['NDLS','MMCT'],['NDLS','ADI']],dep:'17:15',dur:990,km:1377,cl:['1A','2A','3A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'22221',nm:'CSMT - NZM Rajdhani Express',ty:'RAJDHANI',rt:[['CSMT','NDLS'],['CSMT','BPL'],['PUNE','NDLS']],dep:'16:00',dur:1075,km:1542,cl:['1A','2A','3A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12137',nm:'Punjab Mail Superfast Express',ty:'SUPERFAST',rt:[['CSMT','NDLS'],['CSMT','BPL'],['BPL','NDLS']],dep:'19:35',dur:1555,km:1545,cl:['1A','2A','3A','SL'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12301',nm:'Howrah Rajdhani Express (Via Gaya)',ty:'RAJDHANI',rt:[['HWH','NDLS'],['NDLS','HWH'],['NDLS','PNBE'],['NDLS','CNB'],['CNB','HWH']],dep:'16:50',dur:1030,km:1450,cl:['1A','2A','3A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12309',nm:'Rajendra Nagar Tejas Rajdhani',ty:'RAJDHANI',rt:[['NDLS','PNBE'],['PNBE','NDLS'],['NDLS','CNB']],dep:'17:10',dur:715,km:1001,cl:['1A','2A','3A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12273',nm:'Howrah - New Delhi Duronto Express',ty:'DURONTO',rt:[['HWH','NDLS'],['NDLS','HWH'],['PNBE','NDLS']],dep:'08:35',dur:1085,km:1447,cl:['1A','2A','3A','SL'],days:['M','T','-','T','F','-','-'],pan:true},
+{no:'12005',nm:'Kalka Shatabdi Express',ty:'SHATABDI',rt:[['NDLS','CDG'],['CDG','NDLS']],dep:'17:15',dur:195,km:244,cl:['CC','1A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'20977',nm:'Ajmer - Chandigarh Vande Bharat',ty:'VANDE_BHARAT',rt:[['NDLS','CDG'],['CDG','NDLS'],['JP','NDLS'],['JP','CDG']],dep:'07:50',dur:185,km:244,cl:['CC','1A'],days:['M','T','-','T','F','S','S'],pan:true},
+{no:'12002',nm:'Rani Kamalapati Shatabdi Express',ty:'SHATABDI',rt:[['NDLS','BPL'],['BPL','NDLS']],dep:'06:00',dur:505,km:702,cl:['CC','1A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'20171',nm:'Rani Kamalapati - NZM Vande Bharat',ty:'VANDE_BHARAT',rt:[['BPL','NDLS'],['NDLS','BPL']],dep:'14:40',dur:455,km:701,cl:['CC','1A'],days:['M','T','W','T','F','-','S'],pan:true},
+{no:'22691',nm:'KSR Bengaluru Rajdhani Express',ty:'RAJDHANI',rt:[['NDLS','SBC'],['SBC','NDLS'],['NDLS','SC'],['SC','SBC']],dep:'19:50',dur:2010,km:2365,cl:['1A','2A','3A'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12627',nm:'Karnataka Superfast Express',ty:'SUPERFAST',rt:[['SBC','NDLS'],['NDLS','SBC'],['PUNE','NDLS'],['BPL','SBC']],dep:'19:20',dur:2320,km:2406,cl:['1A','2A','3A','SL'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12621',nm:'Tamil Nadu Superfast Express',ty:'SUPERFAST',rt:[['MAS','NDLS'],['NDLS','MAS'],['BZA','NDLS'],['BPL','MAS']],dep:'22:00',dur:1965,km:2182,cl:['1A','2A','3A','SL'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12007',nm:'Chennai Central - Mysuru Shatabdi',ty:'SHATABDI',rt:[['MAS','SBC'],['SBC','MAS']],dep:'06:00',dur:420,km:362,cl:['CC','1A'],days:['M','T','-','T','F','S','S'],pan:true},
+{no:'20607',nm:'Chennai - Mysuru Vande Bharat',ty:'VANDE_BHARAT',rt:[['MAS','SBC'],['SBC','MAS']],dep:'05:50',dur:390,km:362,cl:['CC','1A'],days:['M','T','-','T','F','S','S'],pan:true},
+{no:'11301',nm:'Udyan Express',ty:'SUPERFAST',rt:[['CSMT','SBC'],['SBC','CSMT'],['PUNE','SBC']],dep:'08:10',dur:1410,km:1153,cl:['1A','2A','3A','SL'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12859',nm:'Gitanjali Superfast Express',ty:'SUPERFAST',rt:[['CSMT','HWH'],['HWH','CSMT'],['PUNE','HWH']],dep:'06:00',dur:1830,km:1968,cl:['2A','3A','SL'],days:['M','T','W','T','F','S','S'],pan:true},
+{no:'12009',nm:'Mumbai Central - Ahmedabad Shatabdi',ty:'SHATABDI',rt:[['MMCT','ADI'],['CSMT','ADI'],['ADI','MMCT'],['ADI','CSMT']],dep:'06:20',dur:390,km:493,cl:['CC','1A'],days:['M','T','W','T','F','S','-'],pan:true},
+{no:'12423',nm:'Dibrugarh Rajdhani Express',ty:'RAJDHANI',rt:[['GHY','NDLS'],['NDLS','GHY'],['PNBE','GHY']],dep:'06:45',dur:1640,km:1894,cl:['1A','2A','3A'],days:['M','T','W','T','F','S','S'],pan:true}];
+
+/* ---------------- RAILWAY MATH HELPERS ---------------- */
+function fmtDur(min){ return pad2(Math.floor(min/60))+'h '+pad2(min%60)+'m'; }
+function addMins(t,mins){ const p=t.split(':'); const tot=(+p[0])*60+(+p[1])+mins; const h=Math.floor((tot%1440)/60), m=tot%60, d=Math.floor(tot/1440); const b=pad2(h)+':'+pad2(m); return d>0?b+' (+'+d+'d)':b; }
+function hashSeed(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return Math.abs(h); }
+function buildAvail(cc,km,ty,quota,diff,seed,idx){
+  const rate={'1A':3.65,'2A':2.15,'3A':1.48,CC:1.85,SL:0.58};
+  const mult=(ty==='RAJDHANI'||ty==='VANDE_BHARAT')?1.18:(ty==='SHATABDI'||ty==='DURONTO')?1.12:1.0;
+  const base=Math.max(cc==='SL'?195:495, Math.round((km*rate[cc]*mult)/5)*5);
+  const tat=quota==='CK'?(cc==='SL'?Math.min(200,Math.max(100,Math.round(base*.3))):cc==='CC'?Math.min(225,Math.max(125,Math.round(base*.3))):Math.min(500,Math.max(300,Math.round(base*.3)))):0;
+  const sf=cc==='SL'?30:45, res=cc==='1A'?60:cc==='2A'?50:cc==='SL'?20:40;
+  const roll=(seed+idx*17+cc.charCodeAt(0)*13)%100;
+  let st='AVAILABLE',ct=24,prob;
+  if(quota==='CK'){
+    if(diff==='HARDCORE'){
+      if(idx===0&&(cc==='3A'||cc==='2A'||cc==='CC'||cc==='SL')){st='AVAILABLE';ct=6+(roll%11);}
+      else if(roll<32){st='AVAILABLE';ct=4+(roll%14);} else if(roll<54){st='RAC';ct=3+(roll%9);}
+      else if(roll<82){st='WL';ct=14+(roll%52);prob=Math.max(28,84-Math.floor(ct*.8));} else{st='REGRET';ct=0;}
+    }else if(diff==='RUSH'){
+      if(idx===0){st='AVAILABLE';ct=16+(roll%22);}
+      else if(roll<48){st='AVAILABLE';ct=9+(roll%28);} else if(roll<70){st='RAC';ct=4+(roll%14);}
+      else if(roll<90){st='WL';ct=8+(roll%45);prob=Math.max(42,88-Math.floor(ct*.7));} else{st='REGRET';ct=0;}
+    }else{
+      if(idx===0||roll<62){st='AVAILABLE';ct=22+(roll%36);} else if(roll<80){st='RAC';ct=5+(roll%12);}
+      else if(roll<94){st='WL';ct=6+(roll%30);prob=76;} else{st='REGRET';ct=0;}
+    }
+  }else{
+    if(idx===0||roll<64){st='AVAILABLE';ct=28+(roll%56);} else if(roll<80){st='RAC';ct=6+(roll%16);}
+    else if(roll<95){st='WL';ct=12+(roll%70);prob=Math.max(35,92-Math.floor(ct*.6));} else{st='REGRET';ct=0;}
+  }
+  return {cc:cc,st:st,ct:ct,prob:prob,base:base,tat:tat,sf:sf,res:res};
+}
+function genTrains(from,to,quota,diff,dateStr){
+  const seed=hashSeed(from.code+'-'+to.code+'-'+dateStr+'-'+quota), out=[];
+  const match=CURATED.filter(t=>t.rt.some(r=>r[0]===from.code&&r[1]===to.code));
+  match.forEach((t,idx)=>{ out.push({no:t.no,nm:t.nm,ty:t.ty,fc:from.code,fn:from.name,tc:to.code,tn:to.name,dep:t.dep,arr:addMins(t.dep,t.dur),dur:fmtDur(t.dur),durMin:t.dur,km:t.km,days:t.days,pan:t.pan,cls:t.cl.map(c=>buildAvail(c,t.km,t.ty,quota,diff,seed,idx))}); });
+  const target=Math.max(4,match.length);
+  const fb=[{p:from.city+' - '+to.city+' Garib Rath / AC Express',ty:'SUPERFAST',cl:['1A','2A','3A','SL'],sp:76,dep:'16:15'},{p:to.city+' Duronto Superfast',ty:'DURONTO',cl:['1A','2A','3A','SL'],sp:84,dep:'20:40'},{p:from.city+' - '+to.city+' Vande Bharat Express',ty:'VANDE_BHARAT',cl:['CC','1A'],sp:96,dep:'06:10'},{p:from.city+' Mail Express',ty:'SUPERFAST',cl:['2A','3A','SL'],sp:62,dep:'22:30'},{p:from.city+' - '+to.city+' Sampark Kranti',ty:'SUPERFAST',cl:['1A','2A','3A','SL'],sp:72,dep:'13:20'}];
+  const baseD=match.length>0?match[0].km:420+(seed%1450);
+  let fi=0;
+  while(out.length<target&&fi<fb.length){ const f=fb[fi]; if(f.ty==='VANDE_BHARAT'&&baseD>850){fi++;continue;}
+    const num=String(12000+((seed+fi*313)%980)); const dm=Math.round((baseD/f.sp)*60); const idx=out.length;
+    out.push({no:num,nm:f.p,ty:f.ty,fc:from.code,fn:from.name,tc:to.code,tn:to.name,dep:f.dep,arr:addMins(f.dep,dm),dur:fmtDur(dm),durMin:dm,km:baseD,days:['M','T','W','T','F','S','S'],pan:baseD>500,cls:f.cl.map(c=>buildAvail(c,baseD,f.ty,quota,diff,seed+91,idx))});
+    fi++; }
+  return out;
+}
+function calcFare(av,n,ins){ n=Math.max(1,n); const sub=av.base*n, tt=av.tat*n, sr=(av.sf+av.res)*n;
+  const conv=av.cc==='SL'?15:30; const subG=sub+tt+sr;
+  const gst=av.cc==='SL'?Math.round(conv*.18):Math.round(subG*.05+conv*.18);
+  const insT=ins?Number((0.45*n).toFixed(2)):0;
+  const grand=Number((sub+tt+sr+conv+gst+insT).toFixed(2));
+  return {n:n,sub:sub,tt:tt,sr:sr,conv:conv,gst:gst,ins:insT,grand:grand};
+}
+function assignSeats(pax,cc,av){
+  const mp={'1A':'H1','2A':'A'+(1+Math.floor(Math.random()*3)),'3A':'B'+(1+Math.floor(Math.random()*6)),SL:'S'+(1+Math.floor(Math.random()*9)),CC:'C'+(1+Math.floor(Math.random()*7))};
+  const coach=mp[cc]; const lbl={NO_PREF:cc==='CC'?'WINDOW':'LOWER',LOWER:'LOWER',MIDDLE:'MIDDLE',UPPER:'UPPER',SIDE_LOWER:'SIDE LOWER',SIDE_UPPER:'SIDE UPPER'};
+  const base=12+Math.floor(Math.random()*44);
+  return pax.map((p,i)=>{ const age=parseInt(p.age,10)||28, sn=base+i;
+    if(av.st==='RAC') return {nm:p.name.trim().toUpperCase(),age:age,g:p.gender,food:p.food,st:'RAC / '+(av.ct+i)+' ('+coach+')',coach:coach,bn:sn,bt:'SIDE LOWER (SHARED)'};
+    if(av.st==='WL') return {nm:p.name.trim().toUpperCase(),age:age,g:p.gender,food:p.food,st:'TQWL / '+(av.ct+i),coach:'WAITLIST',bn:null,bt:'WL'};
+    let rb=lbl[p.berth]||'LOWER';
+    if(cc==='CC') rb=i%2===0?'WINDOW (WS)':'AISLE'; else if(cc==='2A'&&rb==='MIDDLE') rb='LOWER';
+    else if(cc==='1A') rb=i%2===0?'CABIN LOWER':'CABIN UPPER';
+    else if(p.berth==='NO_PREF'){ const cy=['LOWER','MIDDLE','UPPER','SIDE LOWER','SIDE UPPER']; rb=cy[(sn+i)%cy.length]; }
+    return {nm:p.name.trim().toUpperCase(),age:age,g:p.gender,food:p.food,st:'CNF / '+coach+' / '+sn+' / '+rb,coach:coach,bn:sn,bt:rb};
+  });
+}
+function genPNR(){ const f=['2','4','6','8'][Math.floor(Math.random()*4)]; let r=''; for(let i=0;i<9;i++) r+=Math.floor(Math.random()*10); return f+r; }
+
+/* ---------------- CAPTCHA (canvas distorted) ---------------- */
+const CCH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnpqrstuvwxyz';
+function genCaptcha(n){ n=n||6; let s=''; for(let i=0;i<n;i++) s+=CCH[Math.floor(Math.random()*CCH.length)]; return s; }
+function drawCaptcha(canvasId,code,compact){
+  const cv=$(canvasId); if(!cv) return; const ctx=cv.getContext('2d'); if(!ctx) return;
+  const w=cv.width,h=cv.height;
+  const g=ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#0f2544'); g.addColorStop(.5,'#1b365d'); g.addColorStop(1,'#10213a');
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=1;
+  for(let x=0;x<w;x+=18){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+8,h); ctx.stroke(); }
+  for(let y=0;y<h;y+=14){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  for(let i=0;i<5;i++){ ctx.strokeStyle=i%2===0?'rgba(245,158,11,0.36)':'rgba(148,163,184,0.35)'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(0,Math.random()*h); ctx.bezierCurveTo(w*.3,Math.random()*h,w*.7,Math.random()*h,w,Math.random()*h); ctx.stroke(); }
+  const sp=(w-28)/code.length, pal=['#ffffff','#fde68a','#f8fafc','#fbbf24','#e2e8f0'];
+  for(let i=0;i<code.length;i++){ ctx.save(); const x=18+i*sp+(Math.random()*4-2), y=h/2+(Math.random()*10-5);
+    ctx.translate(x,y); ctx.rotate((Math.random()-.5)*.52);
+    ctx.font="700 "+(compact?24:28)+"px 'JetBrains Mono',monospace"; ctx.textBaseline='middle';
+    ctx.fillStyle=pal[(i+Math.floor(Math.random()*2))%pal.length]; ctx.shadowColor='rgba(0,0,0,.45)'; ctx.shadowBlur=3;
+    ctx.fillText(code[i],0,0); ctx.restore(); }
+  for(let i=0;i<65;i++){ ctx.fillStyle=Math.random()>.5?'rgba(255,255,255,0.22)':'rgba(245,158,11,0.25)'; ctx.fillRect(Math.random()*w,Math.random()*h,1.8,1.8); }
+}
+function speakCaptcha(code){ Sound.click(); try{ if('speechSynthesis' in window){ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance('Captcha code is '+code.split('').join(', ')); u.rate=.88; speechSynthesis.speak(u);} }catch(e){} }
+
+/* ---------------- QR SVG generator (deterministic 21x21) ---------------- */
+function qrSVG(value,size){
+  size=size||148; const dim=21, m=[]; for(let r=0;r<dim;r++){ m.push([]); for(let c=0;c<dim;c++) m[r].push(false); }
+  function finder(r0,c0){ for(let r=0;r<7;r++) for(let c=0;c<7;c++){ const o=(r===0||r===6||c===0||c===6), inn=(r>=2&&r<=4&&c>=2&&c<=4); m[r0+r][c0+c]=o||inn; } }
+  finder(0,0); finder(0,dim-7); finder(dim-7,0);
+  for(let i=8;i<dim-8;i++){ m[6][i]=i%2===0; m[i][6]=i%2===0; }
+  let h=2166136261; for(let i=0;i<value.length;i++){ h^=value.charCodeAt(i); h=Math.imul(h,16777619); }
+  for(let r=0;r<dim;r++) for(let c=0;c<dim;c++){ const tl=r<8&&c<8, tr=r<8&&c>=dim-8, bl=r>=dim-8&&c<8, tm=(r===6||c===6); if(tl||tr||bl||tm) continue; h=Math.imul(h^(r*31+c*17),16777619); m[r][c]=Math.abs(h)%100>45; }
+  let rects=''; for(let r=0;r<dim;r++) for(let c=0;c<dim;c++) if(m[r][c]) rects+='<rect x="'+c+'" y="'+r+'" width="1" height="1" fill="#0f172a"/>';
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 21 21" class="rounded-lg bg-white p-2 shadow-md" shape-rendering="crispEdges" role="img"><rect width="21" height="21" fill="#ffffff"/>'+rects+'</svg>';
+}
+
+/* ---------------- GLOBAL STATE ---------------- */
+function tomorrowStr(){ const d=new Date(); d.setDate(d.getDate()+1); return d.toISOString().split('T')[0]; }
+const S={
+  screen:'LOGIN', dark:true, loggedIn:false, username:'TATKAL_PRO_99',
+  difficulty:'RUSH', wallet:18450, streak:0, best:null, history:[],
+  master:[{id:'mp-1',name:'Aarav Sharma',age:29,gender:'MALE',berth:'SIDE_LOWER',food:'VEG'},{id:'mp-2',name:'Priya Nair',age:26,gender:'FEMALE',berth:'LOWER',food:'VEG'},{id:'mp-3',name:'Rajesh Iyer',age:59,gender:'MALE',berth:'LOWER',food:'NO_FOOD'}],
+  criteria:{from:STATIONS[0],to:STATIONS[1],date:tomorrowStr(),quota:'CK'},
+  trains:[], selClass:{}, classFilter:'ALL', availOnly:false, sortBy:'DEP', liveTicks:0,
+  slot:null, maxSec:120, remSec:120,
+  pax:[{id:'p1',name:'',age:'',gender:'MALE',berth:'NO_PREF',food:'VEG'}],
+  mobile:'9876543210', ins:true, liveBerths:30, hicLeft:1, srvOpen:false, srvWait:3, srvAdvance:false, srvN:0, capMiss:0, hurdleSec:0, hurdleStart:null,
+  fare:null, result:null,
+  payTab:'UPI', upiId:'tatkal.ninja@okhdfcbank', qrSec:120, bank:'SBI', otpScreen:false, otp:'', subMode:'WALLET',
+  cardNo:'4532 8821 0041 9910', cardEx:'08/29', cardCvv:'742', cardNm:'AARAV SHARMA',
+  // transient UI
+  loginCap:genCaptcha(6), dCap:genCaptcha(6), tatkalSec:6, tatkalType:'AC', tatkalOpened:false,
+  abandonTo:null, fareSheet:false, bookingStart:0, payStart:0, paxSplit:0
+};
+let INT={}; // active intervals
+function clearTimers(){ Object.keys(INT).forEach(k=>{ try{clearInterval(INT[k]);}catch(e){} }); INT={}; }
+
+/* ---------------- TOAST + THEME ---------------- */
+function toast(msg){ const r=$('toast-root'); r.innerHTML='<div class="fixed top-20 right-4 z-[90] animate-pop-in rounded-xl border border-amber-400/40 bg-[#1b365d] px-4 py-2.5 text-xs font-bold text-white shadow-xl max-w-xs">'+esc(msg)+'</div>'; refreshIcons(); setTimeout(()=>{ r.innerHTML=''; },2600); }
+function applyTheme(){ const h=document.documentElement; if(S.dark) h.classList.add('dark'); else h.classList.remove('dark'); }
+
+/* ---------------- NAVIGATION ---------------- */
+const ORDER=['LOGIN','SEARCH','TRAINS','PASSENGER','PAYMENT','RESULT'];
+const STEPS=[{id:'LOGIN',l:'Login',s:'Auth'},{id:'SEARCH',l:'Search',s:'Route'},{id:'TRAINS',l:'Trains',s:'Trains'},{id:'PASSENGER',l:'Passenger',s:'Details'},{id:'PAYMENT',l:'Payment',s:'Pay'},{id:'RESULT',l:'PNR',s:'PNR'}];
+function go(screen){ clearTimers(); S.screen=screen; render(); window.scrollTo({top:0,behavior:'smooth'}); }
+function attemptNav(target){
+  if((S.screen==='PASSENGER'||S.screen==='PAYMENT')&&target!==S.screen){ S.abandonTo=target; renderAbandon(); return; }
+  go(target);
+}
+function backBtn(){
+  const i=ORDER.indexOf(S.screen); if(i<=0) return;
+  if(S.screen==='RESULT'){ go('SEARCH'); return; }
+  attemptNav(ORDER[i-1]);
+}
+
+/* ---------------- TOPBAR ---------------- */
+function renderTopbar(){
+  const idx=ORDER.indexOf(S.screen);
+  const db=S.difficulty==='HARDCORE'?'bg-red-500/15 text-red-500 border-red-500/30 dark:text-red-400':S.difficulty==='RUSH'?'bg-amber-500/15 text-amber-600 border-amber-500/30 dark:text-amber-400':'bg-emerald-500/15 text-emerald-600 border-emerald-500/30 dark:text-emerald-400';
+  let stepsHtml='';
+  STEPS.forEach((st,i)=>{
+    const act=st.id===S.screen, done=i<idx;
+    const can=S.loggedIn&&i<=idx&&st.id!==S.screen&&S.screen!=='RESULT';
+    stepsHtml+='<button type="button" '+(can?'':'disabled')+' data-nav="'+st.id+'" class="stepbtn flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition-all '+(act?'bg-[#1b365d] text-white shadow-sm ring-1 ring-amber-400/50 dark:bg-amber-500 dark:text-slate-950':done?'text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400':'text-slate-400 dark:text-slate-500')+' '+(can?'cursor-pointer':'cursor-default')+'">'
+    +'<span class="flex h-4 w-4 items-center justify-center rounded-full font-mono text-[10px] font-bold '+(act?'bg-amber-400 text-[#1b365d] dark:bg-slate-950 dark:text-amber-400':done?'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400':'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500')+'">'+(i+1)+'</span>'
+    +'<span class="hidden sm:inline">'+st.l+'</span><span class="sm:hidden">'+st.s+'</span></button>';
+    if(i<STEPS.length-1) stepsHtml+='<div class="h-[2px] min-w-[10px] flex-1 rounded-full '+(i<idx?'bg-emerald-500/50':'bg-slate-200 dark:bg-slate-800')+'"></div>';
+  });
+  $('topbar').innerHTML=
+  '<div class="border-b border-slate-200/80 bg-white/85 backdrop-blur-md transition-colors dark:border-slate-800/90 dark:bg-[#0b1322]/90">'
+  +'<div class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:px-6">'
+  +'<div class="flex items-center gap-2.5">'
+  +(S.screen!=='LOGIN'?'<button type="button" id="tb-back" class="btn-tactile flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700" title="Go Back"><i data-lucide="chevron-left" class="h-4 w-4"></i></button>':'')
+  +'<div class="flex items-center gap-2.5"><div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1b365d] shadow-md ring-1 ring-amber-400/50"><svg viewBox="0 0 40 40" class="h-6 w-6"><circle cx="20" cy="20" r="15" fill="none" stroke="#f59e0b" stroke-width="2.2"/><path d="M12 24h16l-1.5-10a3 3 0 0 0-3-2.5h-7a3 3 0 0 0-3 2.5L12 24zm3 3h3m4 0h3M15.5 16h9v4.5h-9z" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'
+  +'<div class="leading-tight"><div class="flex items-center gap-2"><span class="text-sm font-extrabold tracking-tight text-[#1b365d] sm:text-base dark:text-white">IRCTC <span class="text-amber-500">Tatkal</span> Express</span><span class="hidden items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:inline-flex '+db+'"><i data-lucide="'+(S.difficulty==='HARDCORE'?'shield-alert':'zap')+'" class="h-3 w-3"></i>'+S.difficulty+'</span></div>'
+  +'<p class="text-[11px] font-medium text-slate-500 dark:text-slate-400">'+(S.loggedIn?'User: '+esc(S.username):'NextGen e-Ticketing Simulator • Single File')+'</p></div></div></div>'
+  +'<div class="flex items-center gap-1.5 sm:gap-2">'
+  +'<div class="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 md:flex dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200" title="Virtual IRCTC eWallet"><i data-lucide="wallet" class="h-3.5 w-3.5 text-amber-500"></i><span class="font-mono tabular-nums">₹'+inr0(S.wallet)+'</span></div>'
+  +'<div class="hidden items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 sm:flex dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200" title="Booking streak"><i data-lucide="flame" class="h-3.5 w-3.5 '+(S.streak>0?'text-orange-500':'text-slate-400')+'"></i><span class="font-mono tabular-nums">'+S.streak+'</span></div>'
+  +'<button type="button" id="tb-master" class="btn-tactile flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"><i data-lucide="users" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">Master List</span><span class="rounded bg-amber-500/25 px-1.5 py-0.2 font-mono text-[11px] tabular-nums">'+S.master.length+'</span></button>'
+  +'<button type="button" id="tb-sound" class="btn-tactile flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700" title="Toggle sound"><i data-lucide="'+(Sound.enabled?'volume-2':'volume-x')+'" class="h-4 w-4 '+(Sound.enabled?'text-emerald-500':'text-slate-400')+'"></i></button>'
+  +'<button type="button" id="tb-theme" class="btn-tactile flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700" title="Toggle theme"><i data-lucide="'+(S.dark?'sun':'moon')+'" class="h-4 w-4 '+(S.dark?'text-amber-400':'text-[#1b365d]')+'"></i></button>'
+  +'</div></div>'
+  +'<div class="border-t border-slate-200/70 bg-slate-50/70 px-3 py-1.5 dark:border-slate-800/80 dark:bg-[#080e1a]/80"><div class="mx-auto flex max-w-7xl items-center justify-between gap-1 overflow-x-auto">'+stepsHtml+'</div></div>'
+  +'</div>';
+  const bb=$('tb-back'); if(bb) bb.onclick=()=>{Sound.click();backBtn();};
+  $('tb-master').onclick=()=>{Sound.click();renderMasterModal();};
+  $('tb-sound').onclick=()=>{ Sound.enabled=!Sound.enabled; if(Sound.enabled) Sound.click(); renderTopbar(); refreshIcons(); };
+  $('tb-theme').onclick=()=>{ Sound.click(); S.dark=!S.dark; applyTheme(); renderTopbar(); refreshIcons(); };
+  document.querySelectorAll('.stepbtn').forEach(b=>{ b.onclick=()=>{ const t=b.getAttribute('data-nav'); if(t){Sound.click();attemptNav(t);} }; });
+  refreshIcons();
+}
+
+/* ================= SCREEN A : LOGIN ================= */
+function renderA(){
+  const m=$('main');
+  const diffBtns=['NORMAL','RUSH','HARDCORE'].map(k=>{
+    const p=DIFF[k], act=S.difficulty===k;
+    const acc=k==='HARDCORE'?(act?'border-red-500 bg-red-500/10 ring-1 ring-red-500/40':'border-slate-200 dark:border-slate-800 hover:border-red-500/40'):k==='RUSH'?(act?'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40':'border-slate-200 dark:border-slate-800 hover:border-amber-500/40'):(act?'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/40':'border-slate-200 dark:border-slate-800 hover:border-emerald-500/40');
+    return '<button type="button" data-diff="'+k+'" class="diffbtn btn-tactile flex flex-col justify-between rounded-xl border p-3.5 text-left transition '+acc+'"><div class="flex items-center justify-between gap-2"><span class="text-xs font-extrabold text-slate-900 dark:text-white">'+p.label+'</span>'+(act?'<i data-lucide="check-circle-2" class="h-4 w-4 shrink-0 text-amber-500"></i>':'')+'</div><p class="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">'+p.sub+'</p></button>';
+  }).join('');
+  let histHtml='';
+  if(S.history.length>0){
+    histHtml='<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]"><h3 class="mb-3 flex items-center gap-2 text-sm font-extrabold text-slate-900 dark:text-white"><i data-lucide="history" class="h-4 w-4 text-amber-500"></i>Recent Session Attempts</h3><div class="space-y-2">'
+    +S.history.slice(0,4).map(h=>'<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5 text-xs dark:border-slate-800 dark:bg-slate-900/60"><div><span class="font-bold text-slate-900 dark:text-white">'+esc(h.train)+'</span><span class="ml-2 text-slate-500 dark:text-slate-400">'+esc(h.route)+' • '+h.cls+' ('+h.quota+')</span></div><div class="flex items-center gap-2.5 font-mono"><span class="text-slate-500 dark:text-slate-400">'+h.secs.toFixed(1)+'s</span>'+(h.ok?'<span class="rounded-md bg-emerald-500/15 px-2 py-0.5 font-bold text-emerald-600 dark:text-emerald-400">PNR '+h.pnr+'</span>':'<span class="rounded-md bg-red-500/15 px-2 py-0.5 font-bold text-red-600 dark:text-red-400">FAILED</span>')+'</div></div>').join('')
+    +'</div></div>';
+  }
+  m.innerHTML=
+  '<div class="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8">'
+  +'<div class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">'
+  +'<div class="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-[#111b2d]/90"><div class="flex items-center justify-between"><span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">IRCTC eWallet</span><i data-lucide="wallet" class="h-4 w-4 text-amber-500"></i></div><div class="mt-1.5 flex items-baseline justify-between gap-2"><span class="font-mono text-xl font-extrabold text-slate-900 tabular-nums dark:text-white">₹'+inr0(S.wallet)+'</span><button type="button" id="a-topup" class="btn-tactile inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"><i data-lucide="plus-circle" class="h-3 w-3"></i> +5k</button></div></div>'
+  +'<div class="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-[#111b2d]/90"><div class="flex items-center justify-between"><span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Booking Streak</span><i data-lucide="flame" class="h-4 w-4 '+(S.streak>0?'text-orange-500':'text-slate-400')+'"></i></div><div class="mt-1.5 flex items-baseline gap-2"><span class="font-mono text-xl font-extrabold text-slate-900 tabular-nums dark:text-white">'+S.streak+'</span><span class="text-xs font-medium text-slate-500 dark:text-slate-400">consecutive PNRs</span></div></div>'
+  +'<div class="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-[#111b2d]/90"><div class="flex items-center justify-between"><span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Master List</span><i data-lucide="users" class="h-4 w-4 text-sky-500"></i></div><div class="mt-1.5 flex items-baseline justify-between gap-2"><span class="font-mono text-xl font-extrabold text-slate-900 tabular-nums dark:text-white">'+S.master.length+' <span class="text-xs font-semibold text-slate-400">/ 6</span></span><button type="button" id="a-master" class="btn-tactile rounded-md bg-sky-500/15 px-2 py-0.5 text-[11px] font-bold text-sky-700 hover:bg-sky-500/25 dark:text-sky-300">Edit List</button></div></div>'
+  +'<div class="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-[#111b2d]/90"><div class="flex items-center justify-between"><span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fastest Checkout</span><i data-lucide="award" class="h-4 w-4 text-emerald-500"></i></div><div class="mt-1.5 flex items-baseline gap-2"><span class="font-mono text-xl font-extrabold text-slate-900 tabular-nums dark:text-white">'+(S.best!=null?S.best.toFixed(1)+'s':'--.-s')+'</span><span class="text-xs font-medium text-slate-500 dark:text-slate-400">personal best</span></div></div>'
+  +'</div>'
+  +'<div class="grid gap-6 lg:grid-cols-12"><div class="lg:col-span-5"><div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111b2d]">'
+  +'<div class="bg-gradient-to-r from-[#1b365d] via-[#224475] to-[#1b365d] px-6 py-5 text-white"><div class="flex items-center justify-between"><div><span class="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300 ring-1 ring-amber-400/30"><i data-lucide="shield-check" class="h-3 w-3"></i> Secure Portal Login</span><h1 class="mt-2 text-xl font-extrabold tracking-tight">IRCTC Sign In</h1></div><div class="text-right text-[11px] text-slate-300"><p class="font-mono font-semibold text-amber-300">09:58 AM IST</p><p>Pre-Tatkal Session</p></div></div></div>'
+  +'<form id="a-form" class="space-y-4 p-6"><div id="a-err" class="hidden"></div>'
+  +'<div><div class="mb-1.5 flex items-center justify-between"><label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">User Name / ID</label><button type="button" id="a-demo" class="text-[11px] font-semibold text-amber-600 hover:underline dark:text-amber-400">Fill Demo ID</button></div>'
+  +'<div class="relative"><i data-lucide="user" class="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400"></i><input id="a-user" type="text" value="'+esc(S.username)+'" placeholder="Enter IRCTC User ID" class="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pr-4 pl-10 text-sm font-semibold text-slate-900 outline-none transition focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:focus:bg-slate-900" /></div></div>'
+  +'<div><label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Password</label><div class="relative"><i data-lucide="lock" class="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400"></i><input id="a-pass" type="password" value="irctc@10AM" placeholder="Enter Password" class="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pr-10 pl-10 text-sm font-semibold text-slate-900 outline-none transition focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:focus:bg-slate-900" /><button type="button" id="a-eye" class="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 hover:text-slate-600"><i data-lucide="eye" class="h-4 w-4"></i></button></div></div>'
+  +'<div class="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 dark:border-slate-700/80 dark:bg-slate-900/50"><div class="mb-2 flex items-center justify-between"><span class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Security Captcha (Case-Sensitive)</span><span class="text-[10px] font-medium text-slate-400">6 chars required</span></div>'
+  +'<div class="flex items-center gap-2"><div class="relative overflow-hidden rounded-lg border border-amber-500/30 bg-[#1b365d] shadow-inner"><canvas id="a-captcha" width="220" height="56" class="block select-none"></canvas><span class="pointer-events-none absolute right-1.5 bottom-0.5 text-[9px] font-semibold tracking-wider text-amber-300/60">IRCTC SECURE</span></div>'
+  +'<div class="flex flex-col gap-1.5"><button type="button" id="a-refresh" title="Refresh Captcha" class="btn-tactile flex h-7 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"><i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i></button><button type="button" id="a-speak" title="Audio Captcha" class="btn-tactile flex h-7 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"><i data-lucide="volume-2" class="h-3.5 w-3.5"></i></button></div></div>'
+  +'<input id="a-capin" type="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="Type exact Captcha above" class="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-mono text-sm font-bold tracking-widest text-slate-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white" /></div>'
+  +'<button type="submit" id="a-submit" class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1b365d] to-[#274b80] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-blue-950/25 hover:brightness-110 disabled:opacity-70 dark:from-amber-500 dark:to-amber-600 dark:text-slate-950 dark:shadow-amber-500/20">SIGN IN &amp; ENTER PORTAL <i data-lucide="arrow-right" class="h-4 w-4"></i></button>'
+  +'</form></div></div>'
+  +'<div class="space-y-6 lg:col-span-7"><div class="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]/95"><div class="mb-4"><h2 class="flex items-center gap-2 text-base font-extrabold text-slate-900 dark:text-white"><i data-lucide="zap" class="h-4 w-4 text-amber-500"></i>Select Tatkal Simulation Intensity</h2><p class="text-xs text-slate-500 dark:text-slate-400">Controls queue drain speed, server busy popups, and checkout timer limit.</p></div><div class="grid gap-3 sm:grid-cols-3">'+diffBtns+'</div></div>'
+  +'<div class="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-[#1b365d]/5 via-amber-500/5 to-transparent p-5 dark:from-[#1b365d]/40 dark:via-[#111b2d] dark:to-[#0f172a]"><h3 class="flex items-center gap-2 text-sm font-extrabold text-[#1b365d] dark:text-amber-300"><i data-lucide="sparkles" class="h-4 w-4 text-amber-500"></i>How to Beat the 10:00 AM Tatkal Gauntlet</h3><div class="mt-3 grid gap-3 text-xs text-slate-600 sm:grid-cols-2 dark:text-slate-300">'
+  +'<div class="rounded-xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-900/50"><p class="font-bold text-slate-900 dark:text-white">1. Prep Your Master List</p><p class="mt-1 text-slate-500 dark:text-slate-400">3 travellers pre-loaded. Add your own for 1-click auto-fill during checkout.</p></div>'
+  +'<div class="rounded-xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-900/50"><p class="font-bold text-slate-900 dark:text-white">2. Strike at 00:00:00</p><p class="mt-1 text-slate-500 dark:text-slate-400">Watch the Tatkal countdown hit zero, then lock a green AVAILABLE train fast!</p></div>'
+  +'<div class="rounded-xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-900/50"><p class="font-bold text-slate-900 dark:text-white">3. Survive Server Hiccups</p><p class="mt-1 text-slate-500 dark:text-slate-400">Expect HTTP 503 Server Busy popups + secondary Captcha while the clock ticks.</p></div>'
+  +'<div class="rounded-xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-900/50"><p class="font-bold text-slate-900 dark:text-white">4. Instant UPI / eWallet</p><p class="mt-1 text-slate-500 dark:text-slate-400">Use UPI QR push approval, NetBanking auto-OTP, or eWallet for a 10-digit PNR!</p></div>'
+  +'</div></div>'+histHtml+'</div></div></div>';
+  refreshIcons(); drawCaptcha('a-captcha',S.loginCap,false);
+  $('a-topup').onclick=()=>{Sound.click();S.wallet+=5000;toast('₹5,000.00 credited to Virtual IRCTC eWallet!');render();};
+  $('a-master').onclick=()=>{Sound.click();renderMasterModal();};
+  document.querySelectorAll('.diffbtn').forEach(b=>b.onclick=()=>{Sound.click();S.difficulty=b.getAttribute('data-diff');render();});
+  $('a-demo').onclick=()=>{Sound.click();$('a-user').value='TATKAL_PRO_99';$('a-pass').value='irctc@10AM';};
+  $('a-eye').onclick=()=>{ const p=$('a-pass'); p.type=p.type==='password'?'text':'password'; };
+  $('a-refresh').onclick=()=>{Sound.click();S.loginCap=genCaptcha(6);drawCaptcha('a-captcha',S.loginCap,false);$('a-capin').value='';};
+  $('a-speak').onclick=()=>speakCaptcha(S.loginCap);
+  $('a-form').onsubmit=(e)=>{ e.preventDefault();
+    const uid=$('a-user').value.trim(), pw=$('a-pass').value.trim(), ci=$('a-capin').value.trim();
+    const err=$('a-err'); function showE(t){ err.className='flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-xs font-semibold text-red-600 dark:text-red-400'; err.innerHTML='<i data-lucide="alert-circle" class="mt-0.5 h-4 w-4 shrink-0"></i><span>'+esc(t)+'</span>'; refreshIcons(); }
+    err.className='hidden'; err.innerHTML='';
+    if(uid.length<3){Sound.error();showE('Please enter a valid IRCTC User ID (at least 3 characters).');return;}
+    if(pw.length<4){Sound.error();showE('Please enter your IRCTC password.');return;}
+    if(ci!==S.loginCap){Sound.error(); const inp=$('a-capin'); inp.classList.add('animate-shake','border-red-500'); setTimeout(()=>inp.classList.remove('animate-shake','border-red-500'),450); showE('Invalid Captcha! Captcha is case-sensitive. New code generated.'); S.loginCap=genCaptcha(6); drawCaptcha('a-captcha',S.loginCap,false); $('a-capin').value=''; return;}
+    Sound.click(); const btn=$('a-submit'); btn.disabled=true; btn.innerHTML='<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span> Authenticating Session...';
+    setTimeout(()=>{ Sound.tatkalOpen(); S.username=uid; S.loggedIn=true; go('SEARCH'); toast('Welcome back, '+uid+'! Pre-Tatkal session initialized.'); },650);
+  };
+}
+
+/* ================= SCREEN B : SEARCH ================= */
+let B={from:null,to:null,date:'',quota:'CK'};
+function stationOptions(exclude,q,cur){
+  q=(q||'').trim().toLowerCase(); const list=STATIONS.filter(s=>s.code!==exclude);
+  if(!q||q===(cur.code+' - '+cur.name).toLowerCase()) return list;
+  return list.filter(s=>s.code.toLowerCase().includes(q)||s.name.toLowerCase().includes(q)||s.city.toLowerCase().includes(q)||s.state.toLowerCase().includes(q));
+}
+function renderB(){
+  B={from:S.criteria.from,to:S.criteria.to,date:S.criteria.date,quota:S.criteria.quota};
+  if(S.criteria.quota==='CK'&&S.tatkalSec==null) S.tatkalSec=6;
+  const today=new Date().toISOString().split('T')[0]; const mx=new Date(); mx.setDate(mx.getDate()+60); const maxS=mx.toISOString().split('T')[0];
+  const m=$('main');
+  const quotaChips=['GN','CK','LD','SS'].map(c=>{ const inf=QUOTA[c],act=B.quota===c,isT=c==='CK';
+    return '<button type="button" data-q="'+c+'" class="qbtn btn-tactile rounded-xl border p-2.5 text-left transition '+(act?(isT?'border-amber-500 bg-amber-500/15 ring-1 ring-amber-500/40':'border-[#1b365d] bg-[#1b365d]/10 dark:border-amber-400 dark:bg-amber-400/10'):'border-slate-200 bg-slate-50/70 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-slate-700')+'"><div class="flex items-center justify-between"><span class="font-mono text-xs font-extrabold text-slate-900 dark:text-white">'+c+'</span><span class="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase '+(isT?'bg-red-500/20 text-red-600 dark:text-red-400':'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300')+'">'+inf.badge+'</span></div><p class="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300">'+inf.short+'</p></button>';
+  }).join('');
+  const popHtml=POPULAR.map(r=>{ const cur=B.from.code===r.from&&B.to.code===r.to;
+    return '<button type="button" data-f="'+r.from+'" data-t="'+r.to+'" class="popbtn btn-tactile rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition '+(cur?'border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300':'border-slate-200 bg-slate-50 text-slate-700 hover:border-amber-500/40 dark:border-slate-700/80 dark:bg-slate-800/60 dark:text-slate-300')+'"><span class="font-mono font-bold">'+r.from+' → '+r.to+'</span><span class="ml-1.5 text-[10px] opacity-75">('+r.tag+')</span></button>';
+  }).join('');
+  m.innerHTML=
+  '<div class="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8"><div class="grid gap-6 lg:grid-cols-12"><div class="lg:col-span-8"><div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111b2d]">'
+  +'<div class="flex flex-wrap items-center justify-between gap-2 bg-gradient-to-r from-[#1b365d] to-[#23477c] px-6 py-4 text-white"><div class="flex items-center gap-2.5"><i data-lucide="train-front" class="h-5 w-5 text-amber-400"></i><div><h1 class="text-lg font-extrabold tracking-tight">Book Ticket — Plan Your Journey</h1><p class="text-xs text-slate-300">Search across 18 major Indian Railway hubs with live Tatkal timing</p></div></div><span class="rounded-full bg-amber-400/15 px-3 py-1 font-mono text-xs font-bold text-amber-300 ring-1 ring-amber-400/30">18 Hubs Loaded</span></div>'
+  +'<form id="b-form" class="space-y-5 p-5 sm:p-6">'
+  +'<div class="grid items-end gap-3 md:grid-cols-11"><div class="md:col-span-5 relative"><label class="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">From Station (Origin)</label><div class="relative"><i data-lucide="map-pin" class="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-amber-500"></i><input id="b-from" type="text" value="'+esc(B.from.code+' - '+B.from.name)+'" placeholder="Search station code or city" class="w-full rounded-xl border border-slate-300 bg-slate-50 py-3 pr-14 pl-10 text-sm font-bold text-slate-900 outline-none transition focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:focus:bg-slate-900" /><span id="b-fromcode" class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded-md bg-[#1b365d] px-2 py-0.5 font-mono text-[11px] font-bold text-amber-300">'+B.from.code+'</span></div><div id="b-fromlist" class="absolute z-30 mt-1.5 hidden max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl dark:border-slate-700 dark:bg-[#162238]"></div></div>'
+  +'<div class="flex justify-center md:col-span-1 md:pb-1.5"><button type="button" id="b-swap" title="Swap" class="btn-tactile flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-[#1b365d] shadow-sm hover:border-amber-500 hover:bg-amber-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-amber-400"><i data-lucide="arrow-right-left" class="h-4 w-4"></i></button></div>'
+  +'<div class="md:col-span-5 relative"><label class="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">To Station (Destination)</label><div class="relative"><i data-lucide="map-pin" class="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-amber-500"></i><input id="b-to" type="text" value="'+esc(B.to.code+' - '+B.to.name)+'" placeholder="Search station code or city" class="w-full rounded-xl border border-slate-300 bg-slate-50 py-3 pr-14 pl-10 text-sm font-bold text-slate-900 outline-none transition focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:focus:bg-slate-900" /><span id="b-tocode" class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded-md bg-[#1b365d] px-2 py-0.5 font-mono text-[11px] font-bold text-amber-300">'+B.to.code+'</span></div><div id="b-tolist" class="absolute z-30 mt-1.5 hidden max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl dark:border-slate-700 dark:bg-[#162238]"></div></div></div>'
+  +'<div><span class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Popular Tatkal Trunk Routes</span><div class="flex flex-wrap gap-2">'+popHtml+'</div></div>'
+  +'<div class="grid gap-4 sm:grid-cols-2"><div><label class="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Journey Date</label><div class="relative"><i data-lucide="calendar" class="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-amber-500"></i><input id="b-date" type="date" value="'+B.date+'" min="'+today+'" max="'+maxS+'" class="w-full rounded-xl border border-slate-300 bg-slate-50 py-3 pr-3.5 pl-10 font-mono text-sm font-bold text-slate-900 outline-none focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:focus:bg-slate-900" /></div></div>'
+  +'<div><label class="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Booking Quota</label><select id="b-quota" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-3 text-sm font-bold text-slate-900 outline-none focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:focus:bg-slate-900">'+['GN','CK','LD','SS'].map(c=>'<option value="'+c+'" '+(B.quota===c?'selected':'')+'>'+QUOTA[c].label+'</option>').join('')+'</select></div></div>'
+  +'<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">'+quotaChips+'</div>'
+  +'<div id="b-warn"></div>'
+  +'<button type="submit" id="b-search" class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-extrabold shadow-lg transition"></button>'
+  +'</form></div></div>'
+  +'<div class="space-y-5 lg:col-span-4"><div id="b-clock" class="relative overflow-hidden rounded-2xl border p-5 shadow-xl transition-all"></div>'
+  +'<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]"><h3 class="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200"><i data-lucide="shield-alert" class="h-4 w-4 text-amber-500"></i>Selected Corridor Intel</h3><div class="mt-3 space-y-2.5 text-xs"><div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-900/60"><span class="text-slate-500 dark:text-slate-400">Corridor</span><span id="b-route" class="font-mono font-bold text-slate-900 dark:text-white"></span></div><div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-900/60"><span class="text-slate-500 dark:text-slate-400">Quota Mode</span><span id="b-qmode" class="font-bold text-amber-600 dark:text-amber-400"></span></div><div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-900/60"><span class="text-slate-500 dark:text-slate-400">Tatkal Demand</span><span class="inline-flex items-center gap-1 font-bold text-red-500"><i data-lucide="sparkles" class="h-3 w-3"></i> Extreme (94% Peak)</span></div></div></div></div>'
+  +'</div></div>';
+  refreshIcons();
+  // Autocomplete logic
+  function bindAC(inpId,listId,isFrom){
+    const inp=$(inpId), list=$(listId);
+    function show(q){ const cur=isFrom?B.from:B.to, exc=isFrom?B.to.code:B.from.code;
+      const opts=stationOptions(exc,q,cur);
+      if(opts.length===0){ list.innerHTML='<p class="px-3 py-3 text-xs text-slate-500">No matching hubs. Try NDLS, CSMT, HWH, SBC...</p>'; }
+      else list.innerHTML=opts.map(s=>'<button type="button" data-c="'+s.code+'" class="acopt flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition hover:bg-amber-500/10"><div class="min-w-0"><p class="truncate text-xs font-bold text-slate-900 dark:text-white">'+esc(s.name)+'</p><p class="text-[11px] text-slate-500 dark:text-slate-400">'+esc(s.city)+', '+esc(s.state)+' • '+s.zone+' Zone</p></div><span class="ml-2 shrink-0 rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-[#1b365d] dark:bg-slate-800 dark:text-amber-400">'+s.code+'</span></button>').join('');
+      list.classList.remove('hidden');
+      list.querySelectorAll('.acopt').forEach(b=>b.onclick=(e)=>{ e.preventDefault(); const st=STATIONS.find(x=>x.code===b.getAttribute('data-c')); Sound.click(); if(isFrom){B.from=st;$('b-from').value=st.code+' - '+st.name;$('b-fromcode').textContent=st.code;} else {B.to=st;$('b-to').value=st.code+' - '+st.name;$('b-tocode').textContent=st.code;} list.classList.add('hidden'); syncIntel(); });
+    }
+    inp.onfocus=()=>{ inp.value=''; show(''); };
+    inp.oninput=()=>show(inp.value);
+    inp.onblur=()=>setTimeout(()=>{ list.classList.add('hidden'); const cur=isFrom?B.from:B.to; inp.value=cur.code+' - '+cur.name; },180);
+  }
+  bindAC('b-from','b-fromlist',true); bindAC('b-to','b-tolist',false);
+  $('b-swap').onclick=()=>{ Sound.click(); const f=B.from; B.from=B.to; B.to=f; $('b-from').value=B.from.code+' - '+B.from.name; $('b-to').value=B.to.code+' - '+B.to.name; $('b-fromcode').textContent=B.from.code; $('b-tocode').textContent=B.to.code; syncIntel(); };
+  document.querySelectorAll('.popbtn').forEach(b=>b.onclick=()=>{ const f=STATIONS.find(s=>s.code===b.getAttribute('data-f')), t=STATIONS.find(s=>s.code===b.getAttribute('data-t')); if(f&&t){Sound.click();B.from=f;B.to=t;$('b-from').value=f.code+' - '+f.name;$('b-to').value=t.code+' - '+t.name;$('b-fromcode').textContent=f.code;$('b-tocode').textContent=t.code;syncIntel();} });
+  function setQuota(q){ Sound.click(); B.quota=q; $('b-quota').value=q;
+    document.querySelectorAll('.qbtn').forEach(x=>{ const c=x.getAttribute('data-q'); const act=c===q; x.className='qbtn btn-tactile rounded-xl border p-2.5 text-left transition '+(act?(c==='CK'?'border-amber-500 bg-amber-500/15 ring-1 ring-amber-500/40':'border-[#1b365d] bg-[#1b365d]/10 dark:border-amber-400 dark:bg-amber-400/10'):'border-slate-200 bg-slate-50/70 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-slate-700'); });
+    if(q==='CK'){ S.tatkalSec=6; S.tatkalOpened=false; startTatkal(); } else { S.tatkalSec=0; if(INT.tatkal){clearInterval(INT.tatkal);delete INT.tatkal;} }
+    syncIntel(); syncWarn(); syncClock(); syncSearchBtn();
+  }
+  document.querySelectorAll('.qbtn').forEach(b=>b.onclick=()=>setQuota(b.getAttribute('data-q')));
+  $('b-quota').onchange=(e)=>setQuota(e.target.value);
+  $('b-date').onchange=(e)=>{ B.date=e.target.value; };
+  function syncIntel(){ $('b-route').textContent=B.from.code+' → '+B.to.code; $('b-qmode').textContent=QUOTA[B.quota].short+' ('+B.quota+')'; }
+  function syncWarn(){ const w=$('b-warn'); if(B.quota==='CK'){ w.innerHTML='<div class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs"><div class="flex items-start gap-2.5"><i data-lucide="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-500"></i><div class="space-y-1 text-slate-700 dark:text-amber-100"><p class="font-bold">Dynamic Tatkal Opening Time Notice</p><p class="text-slate-600 dark:text-amber-200/85">• <strong>AC Classes (1A, 2A, 3A, CC):</strong> opens at <span class="font-mono font-bold text-amber-600 dark:text-amber-300">10:00:00 AM IST</span><br/>• <strong>Non-AC Sleeper (SL):</strong> opens at <span class="font-mono font-bold text-amber-600 dark:text-amber-300">11:00:00 AM IST</span></p></div></div></div>'; } else w.innerHTML=''; refreshIcons(); }
+  function simClock(){ const th=S.tatkalType==='AC'?10:11; if(S.tatkalSec===0) return pad2(th)+':00:00 IST'; return pad2(th-1)+':59:'+pad2(60-S.tatkalSec)+' IST'; }
+  function syncClock(){
+    const box=$('b-clock');
+    if(B.quota==='CK'){
+      const open=S.tatkalSec===0&&S.tatkalOpened;
+      box.className='relative overflow-hidden rounded-2xl border p-5 shadow-xl transition-all '+(open?'animate-tatkal-pulse border-amber-400 bg-gradient-to-br from-[#1b365d] via-[#13294b] to-[#0f172a] text-white':'border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111b2d]');
+      box.innerHTML='<div class="flex items-center justify-between"><span class="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-500"><i data-lucide="clock" class="h-4 w-4"></i>Tatkal Window Countdown</span><div class="flex rounded-lg border border-slate-300/40 bg-slate-900/40 p-0.5 text-[10px] font-bold"><button type="button" id="b-ac" class="rounded-md px-2 py-0.5 '+(S.tatkalType==='AC'?'bg-amber-500 text-slate-950':'text-slate-300 hover:text-white')+'">AC 10 AM</button><button type="button" id="b-sl" class="rounded-md px-2 py-0.5 '+(S.tatkalType==='SL'?'bg-amber-500 text-slate-950':'text-slate-300 hover:text-white')+'">SL 11 AM</button></div></div>'
+      +'<div class="mt-5 text-center"><p class="text-[11px] font-semibold uppercase tracking-widest '+(S.tatkalSec===0?'text-amber-300':'text-slate-400')+'">Simulated Server Time: <span class="font-mono">'+simClock()+'</span></p>'
+      +'<div class="my-4 rounded-2xl border py-5 '+(S.tatkalSec===0?'border-amber-400/60 bg-emerald-500/20':S.tatkalSec<=3?'animate-urgent-pulse border-red-500/60 bg-red-500/15':'border-amber-500/30 bg-slate-900/80')+'"><div class="font-mono text-4xl font-extrabold tracking-tight tabular-nums sm:text-5xl '+(S.tatkalSec===0?'text-emerald-300':S.tatkalSec<=3?'text-red-400':'text-amber-400')+'">00:00:'+pad2(S.tatkalSec)+'</div><p class="mt-1.5 text-xs font-bold uppercase tracking-wider text-white/90">'+(S.tatkalSec===0?'<span class="inline-flex items-center gap-1 text-emerald-300"><i data-lucide="zap" class="h-3.5 w-3.5"></i> TATKAL OPEN! CLICK SEARCH!</span>':'<span class="text-amber-300">Opening '+(S.tatkalType==='AC'?'10:00:00 AM':'11:00:00 AM')+' Sharp...</span>')+'</p></div>'
+      +'<div class="flex flex-wrap justify-center gap-2">'+(S.tatkalSec>0?'<button type="button" id="b-jump" class="btn-tactile inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/30"><i data-lucide="fast-forward" class="h-3.5 w-3.5"></i> Jump to 00:00:00</button>':'<button type="button" id="b-reset" class="btn-tactile inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i> Reset T-8s Drill</button>')+'</div></div>';
+      $('b-ac').onclick=()=>{Sound.click();S.tatkalType='AC';syncClock();}; $('b-sl').onclick=()=>{Sound.click();S.tatkalType='SL';syncClock();};
+      const j=$('b-jump'); if(j) j.onclick=()=>{ Sound.tatkalOpen(); S.tatkalSec=0; S.tatkalOpened=true; if(INT.tatkal){clearInterval(INT.tatkal);delete INT.tatkal;} syncClock(); syncSearchBtn(); };
+      const r=$('b-reset'); if(r) r.onclick=()=>{ Sound.click(); S.tatkalSec=8; S.tatkalOpened=false; startTatkal(); syncClock(); syncSearchBtn(); };
+    } else {
+      box.className='relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-[#111b2d]';
+      box.innerHTML='<div class="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-500"><i data-lucide="clock" class="h-4 w-4"></i>IRCTC Server Clock</div><div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700/70 dark:bg-slate-900/60"><p class="font-mono text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">BOOKING OPEN</p><p class="mt-1 text-xs text-slate-500 dark:text-slate-400">'+esc(QUOTA[B.quota].desc)+'</p></div>';
+    }
+    refreshIcons();
+  }
+  function syncSearchBtn(){ const b=$('b-search'); const locked=B.quota==='CK'&&S.tatkalSec>0;
+    b.className='btn-tactile flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-extrabold shadow-lg transition '+(locked?'cursor-not-allowed border border-red-500/40 bg-slate-800 text-slate-300':B.quota==='CK'?'animate-tatkal-pulse bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-amber-500/30 hover:brightness-105':'bg-gradient-to-r from-[#1b365d] to-[#274b80] text-white hover:brightness-110 dark:from-amber-500 dark:to-amber-600 dark:text-slate-950');
+    b.innerHTML='<i data-lucide="search" class="h-4 w-4"></i>'+(locked?'TATKAL OPENS IN '+S.tatkalSec+'s — GET READY!':B.quota==='CK'?'SEARCH TATKAL TRAINS NOW (WINDOW LIVE!)':'SEARCH TRAINS'); refreshIcons();
+  }
+  function startTatkal(){ if(INT.tatkal){clearInterval(INT.tatkal);} if(B.quota!=='CK') return;
+    INT.tatkal=setInterval(()=>{ if(S.tatkalSec>0){ S.tatkalSec--; if(S.tatkalSec>0) Sound.tick(); else { Sound.tatkalOpen(); S.tatkalOpened=true; clearInterval(INT.tatkal); delete INT.tatkal; } syncClock(); syncSearchBtn(); } },1000);
+  }
+  if(B.quota==='CK'){ if(S.tatkalSec!==0){ S.tatkalSec=6; S.tatkalOpened=false; } startTatkal(); }
+  syncIntel(); syncWarn(); syncClock(); syncSearchBtn();
+  $('b-form').onsubmit=(e)=>{ e.preventDefault(); if(B.quota==='CK'&&S.tatkalSec>0){ Sound.error(); const b=$('b-search'); b.classList.add('animate-shake'); setTimeout(()=>b.classList.remove('animate-shake'),450); return; }
+    Sound.click(); S.criteria={from:B.from,to:B.to,date:$('b-date').value||B.date,quota:B.quota};
+    S.trains=genTrains(S.criteria.from,S.criteria.to,S.criteria.quota,S.difficulty,S.criteria.date);
+    S.selClass={}; S.trains.forEach(t=>{ const p=t.cls.find(c=>c.cc==='3A'&&c.st==='AVAILABLE')||t.cls.find(c=>c.st==='AVAILABLE')||t.cls[0]; S.selClass[t.no]=p.cc; });
+    S.classFilter='ALL'; S.availOnly=false; S.sortBy='DEP'; S.liveTicks=0;
+    go('TRAINS');
+  };
+}
+
+/* ================= SCREEN C : TRAINS ================= */
+function badgeFor(av){
+  if(av.st==='AVAILABLE') return {bg:'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',pill:'bg-emerald-500 text-white',t:'AVAILABLE '+av.ct};
+  if(av.st==='RAC') return {bg:'border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300',pill:'bg-amber-500 text-slate-950',t:'RAC '+av.ct};
+  if(av.st==='WL'){ const ch=av.prob&&av.prob>=60?'High Chance':(av.prob||55)+'% Prob'; return {bg:'border-red-500/35 bg-red-500/10 text-red-600 dark:text-red-400',pill:'bg-red-500 text-white',t:'WL '+av.ct+' ('+ch+')'}; }
+  return {bg:'border-slate-300 bg-slate-200/70 text-slate-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400',pill:'bg-slate-500 text-white',t:'REGRET / SOLD OUT'};
+}
+function renderC(){
+  const m=$('main'), c=S.criteria;
+  function filtered(){ let L=[...S.trains];
+    if(S.classFilter!=='ALL') L=L.filter(t=>t.cls.some(x=>x.cc===S.classFilter));
+    if(S.availOnly) L=L.filter(t=>t.cls.some(x=>x.st==='AVAILABLE'||x.st==='RAC'));
+    L.sort((a,b)=>{ if(S.sortBy==='FASTEST') return a.durMin-b.durMin; if(S.sortBy==='FARE'){ const mA=Math.min.apply(null,a.cls.map(x=>x.base+x.tat)), mB=Math.min.apply(null,b.cls.map(x=>x.base+x.tat)); return mA-mB; } return a.dep.localeCompare(b.dep); });
+    return L;
+  }
+  function paint(){
+    const list=filtered();
+    m.innerHTML=
+    '<div class="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-7">'
+    +'<div class="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]"><div><div class="flex flex-wrap items-center gap-2"><span class="font-mono text-lg font-extrabold text-[#1b365d] dark:text-white">'+c.from.code+'</span><i data-lucide="arrow-right" class="h-4 w-4 text-amber-500"></i><span class="font-mono text-lg font-extrabold text-[#1b365d] dark:text-white">'+c.to.code+'</span><span class="rounded-md bg-amber-500/15 px-2.5 py-0.5 font-mono text-xs font-bold text-amber-700 dark:text-amber-300">'+QUOTA[c.quota].label+'</span><span class="rounded-md bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">'+esc(c.date)+'</span></div><p class="mt-1 text-xs text-slate-500 dark:text-slate-400">'+esc(c.from.name)+' to '+esc(c.to.name)+' • '+list.length+' Trains Shown</p></div>'
+    +'<div class="flex flex-wrap items-center gap-2.5"><div class="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-600 dark:text-red-400"><i data-lucide="activity" class="h-3.5 w-3.5 animate-pulse"></i><span>Live Inventory Drain</span><span class="font-mono text-[10px] opacity-75">#'+S.liveTicks+'</span></div><button type="button" id="c-mod" class="btn-tactile rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">Modify Search</button></div></div>'
+    +'<div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-[#111b2d]/90"><div class="flex flex-wrap items-center gap-1.5"><span class="mr-1 flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400"><i data-lucide="filter" class="h-3.5 w-3.5"></i> Class:</span>'
+    +['ALL','1A','2A','3A','SL','CC'].map(k=>'<button type="button" data-cf="'+k+'" class="cfbtn btn-tactile rounded-lg px-2.5 py-1 font-mono text-xs font-bold transition '+(S.classFilter===k?'bg-[#1b365d] text-white dark:bg-amber-500 dark:text-slate-950':'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700')+'">'+k+'</button>').join('')
+    +'</div><div class="flex flex-wrap items-center gap-3"><label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300"><input id="c-avail" type="checkbox" '+(S.availOnly?'checked':'')+' class="h-4 w-4 rounded accent-amber-500" /> Available / RAC Only</label><div class="flex items-center gap-1.5"><i data-lucide="sliders-horizontal" class="h-3.5 w-3.5 text-slate-400"></i><select id="c-sort" class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><option value="DEP" '+(S.sortBy==='DEP'?'selected':'')+'>Sort: Departure</option><option value="FASTEST" '+(S.sortBy==='FASTEST'?'selected':'')+'>Sort: Fastest</option><option value="FARE" '+(S.sortBy==='FARE'?'selected':'')+'>Sort: Lowest Fare</option></select></div></div></div>'
+    +'<div class="space-y-4" id="c-list">'
+    +(list.length===0?'<div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-slate-700 dark:bg-[#111b2d]"><p class="text-sm font-bold text-slate-700 dark:text-slate-200">No trains match your active filters.</p><button type="button" id="c-reset" class="mt-3 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950">Reset Filters</button></div>':
+    list.map(t=>{
+      let active=S.selClass[t.no]||t.cls[0].cc;
+      if(S.classFilter!=='ALL'&&t.cls.some(x=>x.cc===S.classFilter)) active=S.classFilter;
+      const av=t.cls.find(x=>x.cc===active)||t.cls[0];
+      const fare=av.base+av.tat+av.sf+av.res;
+      const clsHtml=t.cls.map(x=>{ const s=badgeFor(x), sel=x.cc===av.cc;
+        return '<button type="button" data-tr="'+t.no+'" data-cl="'+x.cc+'" class="clsbtn btn-tactile flex flex-col justify-between rounded-xl border p-2.5 text-left transition '+(sel?'border-amber-500 ring-2 ring-amber-500/35 '+s.bg:'border-slate-200 bg-slate-50/70 hover:border-slate-300 dark:border-slate-700/80 dark:bg-slate-900/50 dark:hover:border-slate-600')+'"><div class="flex items-center justify-between gap-1"><span class="font-mono text-xs font-extrabold text-slate-900 dark:text-white">'+x.cc+'</span><span class="font-mono text-xs font-bold text-slate-600 dark:text-slate-300">₹'+(x.base+x.tat+x.sf+x.res)+'</span></div><div class="animate-flash-badge mt-2 inline-block truncate rounded px-1.5 py-0.5 font-mono text-[10px] font-extrabold '+s.pill+'">'+s.t+'</div></button>';
+      }).join('');
+      const daysHtml=t.days.map((d,i)=>'<span class="flex h-5 w-5 items-center justify-center rounded font-mono '+(d==='-'?'text-slate-400/50':'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400')+'">'+d+'</span>').join('');
+      const dis=av.st==='REGRET';
+      return '<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-amber-500/40 hover:shadow-md dark:border-slate-800 dark:bg-[#111b2d]">'
+      +'<div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/50"><div class="flex flex-wrap items-center gap-2.5"><span class="inline-flex items-center gap-1.5 rounded-lg bg-[#1b365d] px-2.5 py-1 font-mono text-xs font-extrabold text-amber-300"><i data-lucide="train-front" class="h-3.5 w-3.5"></i>'+t.no+'</span><h2 class="text-sm font-extrabold text-slate-900 sm:text-base dark:text-white">'+esc(t.nm)+'</h2>'
+      +((t.ty==='VANDE_BHARAT'||t.ty==='RAJDHANI')?'<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300"><i data-lucide="flame" class="h-3 w-3"></i> '+t.ty.replace('_',' ')+'</span>':'')
+      +(t.pan?'<span class="inline-flex items-center gap-1 rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"><i data-lucide="utensils" class="h-3 w-3"></i> Pantry</span>':'')
+      +'</div><div class="flex items-center gap-1 text-[10px] font-bold"><span class="mr-1 text-slate-400">Runs:</span>'+daysHtml+'</div></div>'
+      +'<div class="p-5"><div class="grid items-center gap-5 lg:grid-cols-12"><div class="flex items-center justify-between gap-3 lg:col-span-5"><div><p class="font-mono text-xl font-extrabold text-slate-900 dark:text-white">'+t.dep+'</p><p class="font-mono text-xs font-bold text-[#1b365d] dark:text-amber-400">'+t.fc+'</p><p class="max-w-[115px] truncate text-[11px] text-slate-500 dark:text-slate-400">'+esc(t.fn)+'</p></div><div class="flex flex-1 flex-col items-center px-2 text-center"><span class="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400"><i data-lucide="clock" class="h-3 w-3 text-amber-500"></i>'+t.dur+'</span><div class="my-1.5 flex w-full items-center"><div class="h-2 w-2 rounded-full bg-amber-500"></div><div class="h-[2px] flex-1 bg-gradient-to-r from-amber-500 via-slate-300 to-emerald-500 dark:via-slate-600"></div><div class="h-2 w-2 rounded-full bg-emerald-500"></div></div><span class="font-mono text-[10px] font-semibold text-slate-400">'+t.km+' km</span></div><div class="text-right"><p class="font-mono text-xl font-extrabold text-slate-900 dark:text-white">'+t.arr+'</p><p class="font-mono text-xs font-bold text-[#1b365d] dark:text-amber-400">'+t.tc+'</p><p class="max-w-[115px] truncate text-[11px] text-slate-500 dark:text-slate-400">'+esc(t.tn)+'</p></div></div>'
+      +'<div class="lg:col-span-7"><div class="grid grid-cols-2 gap-2 sm:grid-cols-4">'+clsHtml+'</div></div></div>'
+      +'<div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3.5 dark:border-slate-800/90"><div class="flex flex-wrap items-center gap-3 text-xs"><span class="font-bold text-slate-700 dark:text-slate-200">'+CLASS_LABELS[av.cc]+'</span><span class="text-slate-400">•</span><span class="text-slate-500 dark:text-slate-400">Base ₹'+av.base+(av.tat>0?' + Tatkal ₹'+av.tat:'')+' + SF/Res ₹'+(av.sf+av.res)+'</span></div><div class="flex items-center gap-3"><div class="text-right"><p class="text-[10px] font-semibold uppercase text-slate-400">Est. Per Head</p><p class="font-mono text-base font-extrabold text-slate-900 dark:text-white">₹'+inr0(fare)+'</p></div>'
+      +'<button type="button" data-book="'+t.no+'|'+av.cc+'" '+(dis?'disabled':'')+' class="bookbtn btn-tactile inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider shadow-md transition '+(dis?'cursor-not-allowed bg-slate-300 text-slate-500 dark:bg-slate-800 dark:text-slate-500':av.st==='AVAILABLE'?'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-emerald-600/20 hover:brightness-110':'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-amber-500/20 hover:brightness-105')+'">'+(dis?'<i data-lucide="lock" class="h-3.5 w-3.5"></i> Quota Regret':'Book Now <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i>')+'</button></div></div></div></div>';
+    }).join(''))
+    +'</div></div>';
+    refreshIcons();
+    $('c-mod').onclick=()=>{Sound.click();go('SEARCH');};
+    document.querySelectorAll('.cfbtn').forEach(b=>b.onclick=()=>{Sound.click();S.classFilter=b.getAttribute('data-cf');paint();});
+    const avc=$('c-avail'); if(avc) avc.onchange=(e)=>{Sound.click();S.availOnly=e.target.checked;paint();};
+    const srt=$('c-sort'); if(srt) srt.onchange=(e)=>{Sound.click();S.sortBy=e.target.value;paint();};
+    const rst=$('c-reset'); if(rst) rst.onclick=()=>{S.classFilter='ALL';S.availOnly=false;paint();};
+    document.querySelectorAll('.clsbtn').forEach(b=>b.onclick=()=>{Sound.click();S.selClass[b.getAttribute('data-tr')]=b.getAttribute('data-cl');paint();});
+    document.querySelectorAll('.bookbtn').forEach(b=>b.onclick=()=>{
+      const parts=b.getAttribute('data-book').split('|'); const tr=S.trains.find(t=>t.no===parts[0]); const av=tr.cls.find(x=>x.cc===parts[1]);
+      if(av.st==='REGRET'){Sound.error();return;}
+      Sound.click(); b.disabled=true; b.innerHTML='<i data-lucide="refresh-cw" class="h-4 w-4 animate-spin"></i> Locking Slot...'; refreshIcons();
+      setTimeout(()=>{ Sound.tatkalOpen();
+        const maxS=DIFF[S.difficulty].sec;
+        S.slot={train:tr,cc:av.cc,av:JSON.parse(JSON.stringify(av)),locked:Date.now()};
+        S.maxSec=maxS; S.remSec=maxS; S.bookingStart=Date.now(); S.payStart=0; S.paxSplit=0;
+        S.pax=[{id:'p'+Date.now(),name:'',age:'',gender:'MALE',berth:'NO_PREF',food:'VEG'}];
+        S.mobile='9876543210'; S.ins=true; S.liveBerths=av.st==='AVAILABLE'?av.ct:8;
+        S.hicLeft=DIFF[S.difficulty].hic; S.srvOpen=false; S.srvN=0; S.capMiss=0; S.hurdleSec=0; S.hurdleStart=null;
+        S.dCap=genCaptcha(6); S.fareSheet=false;
+        go('PASSENGER');
+      },450);
+    });
+  }
+  paint();
+  // Live drain loop
+  const baseMs=S.criteria.quota==='CK'?DIFF[S.difficulty].drain:DIFF[S.difficulty].drain*2.5;
+  INT.drain=setInterval(()=>{
+    S.liveTicks++;
+    S.trains.forEach(tr=>{ tr.cls.forEach(x=>{
+      if(Math.random()>0.42) return;
+      if(x.st==='AVAILABLE'){ const stp=S.difficulty==='HARDCORE'?3:S.difficulty==='RUSH'?2:1; const nx=x.ct-stp;
+        if(nx>0) x.ct=nx; else {x.st='RAC';x.ct=2;} }
+      else if(x.st==='RAC'){ const nx=x.ct+2; if(nx<=18) x.ct=nx; else {x.st='WL';x.ct=4;x.prob=78;} }
+      else if(x.st==='WL'){ const nx=x.ct+(S.difficulty==='HARDCORE'?7:4); if(nx>120){x.st='REGRET';x.ct=0;} else {x.ct=nx;x.prob=Math.max(18,(x.prob||70)-3);} }
+    });});
+    paint();
+  },baseMs);
+}
+
+/* ================= SESSION TIMER (D + E) ================= */
+function startSession(){
+  if(INT.session) clearInterval(INT.session);
+  INT.session=setInterval(()=>{
+    if(S.screen!=='PASSENGER'&&S.screen!=='PAYMENT'){ clearInterval(INT.session); delete INT.session; return; }
+    S.remSec=Math.max(0,S.remSec-1);
+    if(S.remSec>0&&S.remSec<=15) Sound.urgentTick();
+    const el=$('sess-clock'); if(el){ el.textContent=pad2(Math.floor(S.remSec/60))+':'+pad2(S.remSec%60);
+      el.className='rounded-xl px-3.5 py-1.5 font-mono text-xl font-extrabold tabular-nums '+(S.remSec<=25?'bg-red-500 text-white':S.remSec<=60?'bg-amber-500 text-slate-950':'bg-[#1b365d] text-amber-300'); }
+    const bar=$('sess-bar'); if(bar){ bar.style.width=Math.max(0,Math.min(100,(S.remSec/S.maxSec)*100))+'%'; bar.className='h-full transition-all duration-1000 ease-linear '+(S.remSec<=25?'bg-red-500':S.remSec<=60?'bg-amber-500':'bg-emerald-500'); }
+    const box=$('sess-box'); if(box&&S.remSec<=25){ box.className='mb-5 overflow-hidden rounded-2xl border p-4 shadow-md transition animate-urgent-pulse border-red-500/60 bg-red-500/10'; }
+    const el2=$('pay-clock'); if(el2){ el2.innerHTML='<i data-lucide="clock" class="h-4 w-4"></i>'+pad2(Math.floor(S.remSec/60))+':'+pad2(S.remSec%60); el2.className='flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-base font-extrabold tabular-nums '+(S.remSec<=25?'bg-red-600 text-white':'bg-[#1b365d] text-amber-300'); refreshIcons(); }
+    const el3=$('sess-clock2'); if(el3){ el3.textContent=S.remSec+'s left'; }
+    if(S.remSec<=0){ clearInterval(INT.session); delete INT.session; sessionTimeoutFail(); }
+  },1000);
+}
+function sessionTimeoutFail(){
+  if(!S.slot) return; Sound.fail();
+  const preset=DIFF[S.difficulty]; const total=(Date.now()-S.bookingStart)/1000;
+  const fare=S.fare||calcFare(S.slot.av,Math.max(1,S.pax.length),true);
+  S.result={ok:false,reason:'TIMEOUT',head:'Session Timed Out — Tatkal Quota Exhausted!',detail:'Your '+S.maxSec+'s reservation lock expired before payment completed. Rival Tatkal contenders filled '+S.slot.cc+' berths in '+preset.rival+'s!',train:S.slot.train,cc:S.slot.cc,quota:S.criteria.quota,date:S.criteria.date,seats:[],fare:fare,m:{total:total,pax:S.paxSplit||total,hurdle:S.hurdleSec,pay:S.payStart>0?(Date.now()-S.payStart)/1000:0,srv:S.srvN,cap:S.capMiss,rival:preset.rival},at:new Date().toLocaleTimeString()};
+  S.streak=0; S.history.unshift({id:'h'+Date.now(),train:S.slot.train.no+' '+S.slot.train.nm,route:S.slot.train.fc+' → '+S.slot.train.tc,quota:S.criteria.quota,cls:S.slot.cc,ok:false,secs:total,fare:fare.grand,at:new Date().toLocaleTimeString()});
+  go('RESULT');
+}
+
+/* ================= SCREEN D : PASSENGER GAUNTLET ================= */
+function renderD(){
+  const m=$('main'), slot=S.slot, c=S.criteria;
+  function fareNow(){ return calcFare(slot.av,S.pax.length,S.ins); }
+  function paint(){
+    const fare=fareNow();
+    const pct=Math.max(0,Math.min(100,(S.remSec/S.maxSec)*100));
+    const paxHtml=S.pax.map((p,i)=>
+    '<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]"><div class="mb-3 flex items-center justify-between"><span class="rounded-md bg-[#1b365d] px-2.5 py-0.5 font-mono text-[11px] font-bold text-amber-300">PASSENGER #'+(i+1)+'</span>'
+    +(S.pax.length>1?'<button type="button" data-rm="'+p.id+'" class="rmbtn inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-500/10"><i data-lucide="trash-2" class="h-3.5 w-3.5"></i> Remove</button>':'')
+    +'</div><div class="grid grid-cols-1 gap-3 sm:grid-cols-12"><div class="sm:col-span-5"><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Passenger Name</label><input data-f="name" data-id="'+p.id+'" type="text" value="'+esc(p.name)+'" placeholder="Full Name (Max 16 chars)" class="paxin w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-amber-500 focus:bg-white dark:border-slate-700 dark:bg-slate-900/70 dark:text-white" /></div>'
+    +'<div class="grid grid-cols-2 gap-3 sm:col-span-7 sm:grid-cols-4"><div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Age</label><input data-f="age" data-id="'+p.id+'" type="number" min="1" max="110" value="'+esc(p.age)+'" placeholder="Age" class="paxin w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-mono text-sm font-bold text-slate-900 outline-none focus:border-amber-500 focus:bg-white dark:border-slate-700 dark:bg-slate-900/70 dark:text-white" /></div>'
+    +'<div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Gender</label><select data-f="gender" data-id="'+p.id+'" class="paxin w-full rounded-xl border border-slate-300 bg-slate-50 px-2.5 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white"><option value="MALE" '+(p.gender==='MALE'?'selected':'')+'>Male</option><option value="FEMALE" '+(p.gender==='FEMALE'?'selected':'')+'>Female</option><option value="OTHER" '+(p.gender==='OTHER'?'selected':'')+'>Other</option></select></div>'
+    +'<div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Berth Pref</label><select data-f="berth" data-id="'+p.id+'" class="paxin w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white"><option value="NO_PREF" '+(p.berth==='NO_PREF'?'selected':'')+'>No Choice</option><option value="LOWER" '+(p.berth==='LOWER'?'selected':'')+'>Lower</option><option value="MIDDLE" '+(p.berth==='MIDDLE'?'selected':'')+'>Middle</option><option value="UPPER" '+(p.berth==='UPPER'?'selected':'')+'>Upper</option><option value="SIDE_LOWER" '+(p.berth==='SIDE_LOWER'?'selected':'')+'>Side Lower</option><option value="SIDE_UPPER" '+(p.berth==='SIDE_UPPER'?'selected':'')+'>Side Upper</option></select></div>'
+    +'<div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Meal / Food</label><select data-f="food" data-id="'+p.id+'" class="paxin w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white"><option value="VEG" '+(p.food==='VEG'?'selected':'')+'>Veg</option><option value="NON_VEG" '+(p.food==='NON_VEG'?'selected':'')+'>Non-Veg</option><option value="NO_FOOD" '+(p.food==='NO_FOOD'?'selected':'')+'>No Food</option></select></div>'
+    +'</div></div></div>').join('');
+    const masterBtns=S.master.length===0?'<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">No passengers in Master List yet.</p>':'<div class="mt-2.5 flex flex-wrap gap-2">'+S.master.map(x=>'<button type="button" data-mf="'+x.id+'" class="mfbtn btn-tactile inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 hover:border-amber-500 hover:bg-amber-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><i data-lucide="user-plus" class="h-3.5 w-3.5 text-amber-500"></i>'+esc(x.name)+'<span class="font-mono text-[10px] text-slate-500 dark:text-slate-400">('+x.age+', '+x.gender[0]+')</span></button>').join('')+'</div>';
+    m.innerHTML=
+    '<div class="mx-auto max-w-7xl px-3 pt-4 pb-28 sm:px-6 sm:py-6 lg:pb-10">'
+    +'<div id="sess-box" class="mb-5 overflow-hidden rounded-2xl border p-4 shadow-md transition '+(S.remSec<=25?'animate-urgent-pulse border-red-500/60 bg-red-500/10':'border-amber-500/35 bg-white dark:border-amber-500/30 dark:bg-[#111b2d]')+'"><div class="flex flex-wrap items-center justify-between gap-2"><div class="flex items-center gap-2.5"><i data-lucide="clock" class="h-5 w-5 '+(S.remSec<=25?'animate-bounce text-red-500':'text-amber-500')+'"></i><div><p class="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">Tatkal Session Timeout Countdown</p><p class="text-[11px] text-slate-500 dark:text-slate-400">Complete passenger entry, secondary captcha &amp; payment before lock expires!</p></div></div>'
+    +'<div class="flex items-center gap-3"><div class="hidden items-center gap-1.5 rounded-lg bg-amber-500/15 px-2.5 py-1 text-xs font-bold text-amber-700 sm:flex dark:text-amber-300"><i data-lucide="zap" class="h-3.5 w-3.5"></i><span id="d-berths">~'+S.liveBerths+' berths remaining in pool</span></div><div id="sess-clock" class="rounded-xl px-3.5 py-1.5 font-mono text-xl font-extrabold tabular-nums '+(S.remSec<=25?'bg-red-500 text-white':S.remSec<=60?'bg-amber-500 text-slate-950':'bg-[#1b365d] text-amber-300')+'">'+pad2(Math.floor(S.remSec/60))+':'+pad2(S.remSec%60)+'</div></div></div><div class="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div id="sess-bar" class="h-full transition-all duration-1000 ease-linear '+(S.remSec<=25?'bg-red-500':S.remSec<=60?'bg-amber-500':'bg-emerald-500')+'" style="width:'+pct+'%"></div></div></div>'
+    +'<form id="d-form" class="grid gap-6 lg:grid-cols-12"><div class="space-y-5 lg:col-span-8">'
+    +'<div class="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 dark:bg-[#111b2d]"><div class="flex flex-wrap items-center justify-between gap-2"><div class="flex items-center gap-2"><i data-lucide="sparkles" class="h-4 w-4 text-amber-500"></i><span class="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-amber-300">Speedrun Auto-Fill (Master List)</span></div>'
+    +(S.master.length>0?'<button type="button" id="d-fillall" class="btn-tactile inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-extrabold text-slate-950 shadow hover:bg-amber-400"><i data-lucide="zap" class="h-3.5 w-3.5"></i> Auto-Fill All ('+Math.min(4,S.master.length)+')</button>':'')
+    +'</div>'+masterBtns+'</div>'
+    +'<div id="d-err" class="hidden"></div>'
+    +'<div class="space-y-3"><div class="flex items-center justify-between"><h2 class="flex items-center gap-2 text-sm font-extrabold text-slate-900 dark:text-white"><i data-lucide="users" class="h-4 w-4 text-amber-500"></i>Passenger Details ('+S.pax.length+'/4)</h2>'
+    +(S.pax.length<4?'<button type="button" id="d-add" class="btn-tactile inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-[#1b365d] hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-amber-300 dark:hover:bg-slate-700"><i data-lucide="plus" class="h-3.5 w-3.5"></i> Add Passenger</button>':'')+'</div>'+paxHtml+'</div>'
+    +'<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]"><div class="grid gap-4 sm:grid-cols-2"><div><label class="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300">SMS / Ticket Mobile Number</label><div class="flex"><span class="inline-flex items-center rounded-l-xl border border-r-0 border-slate-300 bg-slate-100 px-3 font-mono text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">+91</span><input id="d-mobile" type="tel" maxlength="10" value="'+esc(S.mobile)+'" class="w-full rounded-r-xl border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm font-bold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white" /></div></div>'
+    +'<div class="space-y-2 text-xs"><label class="flex cursor-pointer items-center gap-2 font-semibold text-slate-700 dark:text-slate-300"><input type="checkbox" checked class="h-4 w-4 rounded accent-amber-500" /> Consider for Auto Upgradation</label><label class="flex cursor-pointer items-center gap-2 font-semibold text-slate-700 dark:text-slate-300"><input type="checkbox" class="h-4 w-4 rounded accent-amber-500" /> Book only if all berths in same coach</label><label class="flex cursor-pointer items-center gap-2 font-semibold text-slate-700 dark:text-slate-300"><input id="d-ins" type="checkbox" '+(S.ins?'checked':'')+' class="h-4 w-4 rounded accent-amber-500" /> Opt for Travel Insurance (₹0.45/passenger)</label></div></div></div>'
+    +'<div class="rounded-2xl border border-amber-500/40 bg-white p-5 shadow-md dark:border-amber-500/30 dark:bg-[#111b2d]"><div class="mb-3 flex flex-wrap items-center justify-between gap-2"><div class="flex items-center gap-2"><i data-lucide="shield-check" class="h-4 w-4 text-amber-500"></i><h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">Mandatory Anti-Bot Review Captcha</h3></div><span class="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Case-Sensitive Verification</span></div>'
+    +'<div class="flex flex-col gap-4 sm:flex-row sm:items-center"><div class="flex items-center gap-2"><div class="relative overflow-hidden rounded-lg border border-amber-500/30 bg-[#1b365d] shadow-inner"><canvas id="d-captcha" width="190" height="48" class="block select-none"></canvas><span class="pointer-events-none absolute right-1.5 bottom-0.5 text-[9px] font-semibold tracking-wider text-amber-300/60">IRCTC SECURE</span></div><div class="flex flex-col gap-1.5"><button type="button" id="d-refresh" class="btn-tactile flex h-7 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i></button><button type="button" id="d-speak" class="btn-tactile flex h-7 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><i data-lucide="volume-2" class="h-3.5 w-3.5"></i></button></div></div>'
+    +'<div class="flex-1"><input id="d-capin" type="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="Enter 6-char Captcha before payment" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono text-base font-bold tracking-widest text-slate-900 outline-none transition focus:border-amber-500 focus:bg-white dark:border-slate-700 dark:bg-slate-950 dark:text-white" /></div></div></div>'
+    +'</div>'
+    +'<div class="hidden lg:col-span-4 lg:block"><div class="sticky top-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-[#111b2d]"><div class="border-b border-slate-200 pb-3 dark:border-slate-800"><span class="rounded bg-[#1b365d] px-2 py-0.5 font-mono text-[11px] font-bold text-amber-300">'+slot.train.no+'</span><h3 class="mt-1.5 text-sm font-extrabold text-slate-900 dark:text-white">'+esc(slot.train.nm)+'</h3><p class="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">'+slot.train.fc+' ('+slot.train.dep+') → '+slot.train.tc+' ('+slot.train.arr+')</p><div class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold"><span class="rounded bg-amber-500/15 px-2 py-0.5 text-amber-700 dark:text-amber-300">Class: '+slot.cc+'</span><span class="rounded bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">Quota: '+c.quota+'</span><span class="rounded bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">'+esc(c.date)+'</span></div></div>'
+    +'<div class="space-y-2 text-xs"><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Ticket Base Fare ('+S.pax.length+'x)</span><span class="font-mono font-bold">₹'+inr2(fare.sub)+'</span></div>'
+    +(fare.tt>0?'<div class="flex justify-between text-amber-600 dark:text-amber-400"><span>Tatkal Charges ('+S.pax.length+'x)</span><span class="font-mono font-bold">₹'+inr2(fare.tt)+'</span></div>':'')
+    +'<div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Reservation &amp; Superfast</span><span class="font-mono font-bold">₹'+inr2(fare.sr)+'</span></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>IRCTC Convenience Fee</span><span class="font-mono font-bold">₹'+inr2(fare.conv)+'</span></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>GST (5% AC / 18% Conv)</span><span class="font-mono font-bold">₹'+inr2(fare.gst)+'</span></div>'
+    +(fare.ins>0?'<div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Travel Insurance</span><span class="font-mono font-bold">₹'+inr2(fare.ins)+'</span></div>':'')
+    +'<div class="border-t border-slate-200 pt-3 dark:border-slate-800"><div class="flex items-baseline justify-between"><span class="text-sm font-extrabold text-slate-900 dark:text-white">Total Payable</span><span class="font-mono text-xl font-extrabold text-emerald-600 dark:text-emerald-400">₹'+inr2(fare.grand)+'</span></div></div></div>'
+    +'<button type="submit" class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3.5 text-sm font-extrabold text-slate-950 shadow-lg shadow-amber-500/25 hover:brightness-105">PROCEED TO PAYMENT <i data-lucide="arrow-right" class="h-4 w-4"></i></button></div></div>'
+    +'<div class="fixed right-0 bottom-0 left-0 z-30 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-md lg:hidden dark:border-slate-800 dark:bg-[#0d1627]/95">'
+    +(S.fareSheet?'<div class="animate-slide-up mb-3 space-y-1.5 border-b border-slate-200 pb-3 text-xs dark:border-slate-800"><div class="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600"></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>'+slot.train.no+' • '+slot.cc+' ('+c.quota+')</span><span class="font-mono font-bold">'+S.pax.length+' Pax</span></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Base + SF + Res + Tatkal</span><span class="font-mono">₹'+inr2(fare.sub+fare.tt+fare.sr)+'</span></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Conv. Fee + GST + Insurance</span><span class="font-mono">₹'+inr2(fare.conv+fare.gst+fare.ins)+'</span></div></div>':'')
+    +'<div class="flex items-center justify-between gap-3"><button type="button" id="d-sheet" class="flex items-center gap-1.5 text-left"><div><p class="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Total Fare</p><p class="font-mono text-lg font-extrabold text-emerald-600 dark:text-emerald-400">₹'+inr2(fare.grand)+'</p></div><i data-lucide="chevron-up" class="h-4 w-4 text-slate-400 transition-transform '+(S.fareSheet?'rotate-180':'')+'"></i></button><button type="submit" class="btn-tactile flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-extrabold text-slate-950 shadow-lg">PAY NOW <i data-lucide="arrow-right" class="h-4 w-4"></i></button></div></div>'
+    +'</form></div>';
+    refreshIcons(); drawCaptcha('d-captcha',S.dCap,true);
+    // bindings
+    document.querySelectorAll('.paxin').forEach(el=>{ el.oninput=()=>{ const id=el.getAttribute('data-id'), f=el.getAttribute('data-f'); const p=S.pax.find(x=>x.id===id); if(p) p[f]=el.value; }; el.onchange=()=>{ const id=el.getAttribute('data-id'), f=el.getAttribute('data-f'); const p=S.pax.find(x=>x.id===id); if(p){ p[f]=el.value; if(f==='age'||true){} } }; });
+    document.querySelectorAll('.rmbtn').forEach(b=>b.onclick=()=>{ if(S.pax.length<=1) return; Sound.click(); S.pax=S.pax.filter(x=>x.id!==b.getAttribute('data-rm')); paint(); });
+    const add=$('d-add'); if(add) add.onclick=()=>{ if(S.pax.length>=4) return; Sound.click(); S.pax.push({id:'p'+Date.now()+Math.floor(Math.random()*999),name:'',age:'',gender:'MALE',berth:'NO_PREF',food:'VEG'}); paint(); };
+    document.querySelectorAll('.mfbtn').forEach(b=>b.onclick=()=>{ const mp=S.master.find(x=>x.id===b.getAttribute('data-mf')); if(!mp) return; Sound.click(); hideErr();
+      const bi=S.pax.findIndex(p=>p.name.trim()==='');
+      const mapped={id:'p'+Date.now()+Math.floor(Math.random()*999),name:mp.name,age:String(mp.age),gender:mp.gender,berth:mp.berth,food:mp.food};
+      if(bi>=0) S.pax[bi]=mapped; else if(S.pax.length<4) S.pax.push(mapped);
+      paint();
+    });
+    const fa=$('d-fillall'); if(fa) fa.onclick=()=>{ if(S.master.length===0) return; Sound.tatkalOpen(); hideErr(); S.pax=S.master.slice(0,4).map((x,i)=>({id:'p'+Date.now()+i,name:x.name,age:String(x.age),gender:x.gender,berth:x.berth,food:x.food})); paint(); };
+    $('d-mobile').oninput=(e)=>{ S.mobile=e.target.value.replace(/\D/g,'').slice(0,10); e.target.value=S.mobile; };
+    $('d-ins').onchange=(e)=>{ S.ins=e.target.checked; paint(); };
+    $('d-refresh').onclick=()=>{ Sound.click(); S.dCap=genCaptcha(6); drawCaptcha('d-captcha',S.dCap,true); $('d-capin').value=''; };
+    $('d-speak').onclick=()=>speakCaptcha(S.dCap);
+    $('d-sheet').onclick=()=>{ Sound.click(); S.fareSheet=!S.fareSheet; paint(); };
+    function hideErr(){ const e=$('d-err'); e.className='hidden'; e.innerHTML=''; }
+    function showErr(t){ const e=$('d-err'); e.className='flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-600 dark:text-red-400'; e.innerHTML='<i data-lucide="alert-circle" class="mt-0.5 h-4 w-4 shrink-0"></i><span>'+esc(t)+'</span>'; refreshIcons(); }
+    $('d-form').onsubmit=(e)=>{ e.preventDefault(); hideErr();
+      for(let i=0;i<S.pax.length;i++){ const p=S.pax[i];
+        if((p.name||'').trim().length<2){ Sound.error(); showErr('Passenger #'+(i+1)+': Please enter a valid full name.'); return; }
+        const a=parseInt(p.age,10); if(isNaN(a)||a<1||a>110){ Sound.error(); showErr('Passenger #'+(i+1)+': Enter a valid age (1–110).'); return; }
+      }
+      if(!/^\d{10}$/.test((S.mobile||'').trim())){ Sound.error(); showErr('Enter a valid 10-digit Indian mobile number.'); return; }
+      const ci=$('d-capin').value.trim();
+      if(ci!==S.dCap){ Sound.error(); S.capMiss++; const inp=$('d-capin'); inp.classList.add('animate-shake'); setTimeout(()=>inp.classList.remove('animate-shake'),450); showErr('Secondary Security Captcha mismatch! New Captcha generated.'); S.dCap=genCaptcha(6); drawCaptcha('d-captcha',S.dCap,true); $('d-capin').value=''; return; }
+      if(S.hicLeft>0){ triggerHiccup(true); return; }
+      Sound.click(); proceedPay();
+    };
+  }
+  paint(); startSession();
+  if(INT.berth) clearInterval(INT.berth);
+  INT.berth=setInterval(()=>{ S.liveBerths=Math.max(1,S.liveBerths-(Math.random()>0.5?1:0)); const b=$('d-berths'); if(b) b.textContent='~'+S.liveBerths+' berths remaining in pool'; },2800);
+  if(S.difficulty==='HARDCORE'){ setTimeout(()=>{ if(S.screen==='PASSENGER'&&S.hicLeft>1&&!S.srvOpen) triggerHiccup(false); },12000); }
+  function triggerHiccup(adv){ Sound.serverBusy(); S.srvN++; S.hicLeft=Math.max(0,S.hicLeft-1); S.srvWait=3; S.srvAdvance=adv; S.hurdleStart=Date.now(); S.srvOpen=true; renderSrvModal(); }
+  window.__retrySrv=function(){ if(S.srvWait>0||!S.srvOpen) return; Sound.click();
+    if(S.hurdleStart){ S.hurdleSec+=(Date.now()-S.hurdleStart)/1000; S.hurdleStart=null; }
+    S.srvOpen=false; $('modal-root').innerHTML='';
+    if(S.srvAdvance){ S.srvAdvance=false; proceedPay(); }
+  };
+  function proceedPay(){
+    S.fare=calcFare(slot.av,S.pax.length,S.ins);
+    S.paxSplit=(Date.now()-S.bookingStart)/1000; S.payStart=Date.now();
+    S.payTab='UPI'; S.qrSec=120; S.otpScreen=false; S.otp=''; $('push-root').innerHTML='';
+    go('PAYMENT');
+  }
+  window.__triggerHiccup=triggerHiccup;
+}
+function renderSrvModal(){
+  const r=$('modal-root');
+  r.innerHTML='<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"><div class="animate-pop-in w-full max-w-md overflow-hidden rounded-2xl border border-red-500/40 bg-white shadow-2xl dark:bg-[#111b2d]"><div class="flex items-center gap-3 bg-red-600 px-5 py-4 text-white"><i data-lucide="server-crash" class="h-6 w-6 shrink-0"></i><div><h3 class="text-base font-extrabold">IRCTC Server Busy (HTTP 503)</h3><p class="text-xs text-red-100">Heavy Tatkal traffic congestion detected</p></div></div>'
+  +'<div class="space-y-4 p-5 text-center"><div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15 text-red-500"><i data-lucide="alert-triangle" class="h-7 w-7 animate-pulse"></i></div><p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Unable to reach CRIS Reservation Core. Your session lock is still active—please retry quickly!</p><div class="rounded-xl bg-slate-100 px-4 py-2.5 font-mono text-xs font-bold text-slate-600 dark:bg-slate-900 dark:text-amber-300">Session Clock Still Running: <span id="sess-clock2">'+S.remSec+'s left</span></div><button type="button" id="srv-retry" disabled class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-extrabold transition cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400"><i data-lucide="refresh-cw" class="h-4 w-4 animate-spin"></i><span id="srv-txt">Server busy, please retry in 3s...</span></button></div></div></div>';
+  refreshIcons();
+  $('srv-retry').onclick=()=>window.__retrySrv();
+  if(INT.srv) clearInterval(INT.srv);
+  INT.srv=setInterval(()=>{ if(!S.srvOpen){clearInterval(INT.srv);delete INT.srv;return;} S.srvWait=Math.max(0,S.srvWait-1);
+    const t=$('srv-txt'), b=$('srv-retry'); if(!t||!b){clearInterval(INT.srv);delete INT.srv;return;}
+    if(S.srvWait>0){ t.textContent='Server busy, please retry in '+S.srvWait+'s...'; }
+    else { t.textContent='RETRY CONNECTION NOW!'; b.disabled=false; b.className='btn-tactile flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-extrabold transition animate-tatkal-pulse bg-emerald-500 text-slate-950 hover:bg-emerald-400'; clearInterval(INT.srv); delete INT.srv; }
+  },1000);
+}
+
+/* ================= SCREEN E : PAYMENT ================= */
+function renderE(){
+  const m=$('main'), slot=S.slot, fare=S.fare;
+  const qrStr='upi://pay?pa=irctc.tatkal@icici&pn=IRCTC%20Railways&am='+fare.grand.toFixed(2)+'&tr='+slot.train.no;
+  function paint(){
+    const tabs=[{id:'UPI',l:'UPI / QR Code',ic:'qr-code'},{id:'NETBANKING',l:'Net Banking',ic:'building-2'},{id:'CARD_WALLET',l:'Card / eWallet',ic:'credit-card'}].map(t=>'<button type="button" data-pt="'+t.id+'" class="ptbtn flex items-center justify-center gap-2 border-b-2 px-3 py-3.5 text-xs font-extrabold transition sm:text-sm '+(S.payTab===t.id?'border-amber-500 bg-white text-[#1b365d] dark:bg-[#111b2d] dark:text-amber-400':'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')+'"><i data-lucide="'+t.ic+'" class="h-4 w-4 shrink-0"></i><span class="truncate">'+t.l+'</span></button>').join('');
+    let body='';
+    if(S.payTab==='UPI'){
+      body='<div class="grid items-center gap-7 md:grid-cols-12"><div class="flex flex-col items-center rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center md:col-span-5 dark:border-slate-700/80 dark:bg-slate-900/60"><span class="mb-2 rounded-full bg-emerald-500/15 px-3 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">BHIM UPI • ZERO CONVENIENCE DELAY</span><div class="relative overflow-hidden rounded-xl border-2 border-amber-500/50 bg-white p-2 shadow-lg">'+qrSVG(qrStr,160)+'<div class="animate-scan-laser pointer-events-none absolute right-2 left-2 h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent" style="box-shadow:0 0 8px rgba(239,68,68,.9)"></div></div><p class="mt-3 font-mono text-xs font-bold text-slate-600 dark:text-slate-300">QR Expires in <span class="text-amber-600 dark:text-amber-400" id="e-qrtime">'+pad2(Math.floor(S.qrSec/60))+':'+pad2(S.qrSec%60)+'</span></p><button type="button" id="e-qrsim" class="btn-tactile mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#1b365d] px-4 py-2 text-xs font-extrabold text-amber-300 shadow hover:bg-[#234578]"><i data-lucide="smartphone" class="h-3.5 w-3.5"></i> Simulate QR Scan &amp; App Approval</button></div>'
+      +'<div class="space-y-4 md:col-span-7"><div><h3 class="text-base font-extrabold text-slate-900 dark:text-white">Pay via UPI ID / VPA Collect Request</h3><p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Enter your VPA or use the simulated QR scanner to trigger a push approval popup.</p></div><div><label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Virtual Payment Address (VPA)</label><input id="e-upi" type="text" value="'+esc(S.upiId)+'" placeholder="yourname@okaxis" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono text-sm font-bold text-slate-900 outline-none focus:border-amber-500 focus:bg-white dark:border-slate-700 dark:bg-slate-900/80 dark:text-white" /></div>'
+      +'<div class="flex flex-wrap gap-2 text-[11px] font-semibold text-slate-500">'+['@okhdfcbank','@ybl','@okicici','@paytm'].map(sfx=>'<button type="button" data-sfx="'+sfx+'" class="sfxbtn rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 hover:border-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">'+sfx+'</button>').join('')+'</div>'
+      +'<button type="button" id="e-collect" class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3.5 text-sm font-extrabold text-slate-950 shadow-lg hover:brightness-105"><i data-lucide="zap" class="h-4 w-4"></i> SEND UPI COLLECT REQUEST (₹'+inr2(fare.grand)+')</button></div></div>';
+    } else if(S.payTab==='NETBANKING'){
+      if(!S.otpScreen){
+        body='<div class="mx-auto max-w-xl space-y-5"><div><h3 class="text-base font-extrabold text-slate-900 dark:text-white">Select Your Net Banking Partner</h3><p class="text-xs text-slate-500 dark:text-slate-400">Instant 3D-Secure verification with simulated Bank OTP screen.</p></div><div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">'
+        +BANKS.map(b=>{ const a=S.bank===b.id; return '<button type="button" data-bank="'+b.id+'" class="bankbtn btn-tactile flex items-center justify-between rounded-xl border p-3.5 text-left transition '+(a?'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40':'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50')+'"><div><p class="text-xs font-extrabold text-slate-900 dark:text-white">'+esc(b.name)+'</p><span class="text-[10px] font-semibold text-amber-600 dark:text-amber-400">'+b.tag+'</span></div>'+(a?'<i data-lucide="check-circle-2" class="h-4 w-4 text-amber-500"></i>':'')+'</button>'; }).join('')
+        +'</div><div><label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Or Choose From All Banks Dropdown</label><select id="e-bank sel" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-3 text-sm font-bold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">'+BANKS.map(b=>'<option value="'+b.id+'" '+(S.bank===b.id?'selected':'')+'>'+esc(b.name)+'</option>').join('')+'</select></div><button type="button" id="e-bankgo" class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl bg-[#1b365d] px-5 py-3.5 text-sm font-extrabold text-white shadow-lg hover:bg-[#234578] dark:bg-amber-500 dark:text-slate-950">PROCEED TO '+S.bank+' SECURE LOGIN</button></div>';
+      } else {
+        const bn=(BANKS.find(b=>b.id===S.bank)||{}).name||S.bank;
+        body='<div class="mx-auto max-w-md space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-900/70"><div class="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-700"><div><span class="rounded bg-[#1b365d] px-2 py-0.5 font-mono text-[10px] font-bold text-amber-300">'+S.bank+' SECURE 3DS</span><h4 class="mt-1 text-sm font-extrabold text-slate-900 dark:text-white">One-Time Password (OTP) Verification</h4></div><i data-lucide="shield-check" class="h-6 w-6 text-emerald-500"></i></div>'
+        +'<p class="text-xs text-slate-600 dark:text-slate-300">An OTP has been sent to your registered mobile <span class="font-mono font-bold">+91 ••••••3210</span> for Merchant <strong>IRCTC RAILWAYS</strong> (₹'+inr2(fare.grand)+').</p><div><label class="mb-1 block text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">Enter Any 6-Digit OTP</label><input id="e-otp" type="text" maxlength="6" value="'+esc(S.otp)+'" placeholder="• • • • • •" class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center font-mono text-lg font-extrabold tracking-[0.4em] text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white" /></div>'
+        +'<div class="flex flex-col gap-2.5 sm:flex-row"><button type="button" id="e-otpgo" class="btn-tactile flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-extrabold text-white hover:bg-emerald-500">SUBMIT OTP &amp; PAY</button><button type="button" id="e-autootp" class="btn-tactile flex-1 rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-3 text-xs font-extrabold text-amber-700 hover:bg-amber-500/25 dark:text-amber-300">⚡ Auto-Verify OTP</button></div><button type="button" id="e-backbank" class="w-full text-center text-xs font-semibold text-slate-500 hover:underline">← Change Bank</button></div>';
+      }
+    } else {
+      body='<div class="mx-auto max-w-xl space-y-5"><div class="grid grid-cols-2 gap-3">'
+      +'<button type="button" id="e-wm" class="btn-tactile flex items-center gap-2.5 rounded-xl border p-3.5 text-left '+(S.subMode==='WALLET'?'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40':'border-slate-200 dark:border-slate-700')+'"><i data-lucide="wallet" class="h-5 w-5 text-amber-500"></i><div><p class="text-xs font-extrabold text-slate-900 dark:text-white">IRCTC eWallet</p><p class="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">Bal: ₹'+inr0(S.wallet)+'</p></div></button>'
+      +'<button type="button" id="e-cm" class="btn-tactile flex items-center gap-2.5 rounded-xl border p-3.5 text-left '+(S.subMode==='CARD'?'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40':'border-slate-200 dark:border-slate-700')+'"><i data-lucide="credit-card" class="h-5 w-5 text-sky-500"></i><div><p class="text-xs font-extrabold text-slate-900 dark:text-white">Credit / Debit Card</p><p class="text-[11px] text-slate-500 dark:text-slate-400">VISA • RuPay • MC</p></div></button></div>'
+      +(S.subMode==='WALLET'
+        ?'<div class="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-4 dark:border-slate-700 dark:bg-slate-900/60"><div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-600 dark:text-slate-300">Available Wallet Balance</span><span class="font-mono text-base font-extrabold text-slate-900 dark:text-white">₹'+inr2(S.wallet)+'</span></div><div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-600 dark:text-slate-300">Ticket Fare Deduction</span><span class="font-mono text-base font-extrabold text-amber-600 dark:text-amber-400">- ₹'+inr2(fare.grand)+'</span></div>'
+        +(S.wallet<fare.grand?'<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-red-500/15 p-3 text-xs font-bold text-red-600 dark:text-red-400"><span>Insufficient wallet balance.</span><button type="button" id="e-topup" class="rounded-lg bg-amber-500 px-3 py-1 text-slate-950">+ Add ₹5,000 Demo Funds</button></div>':'<div class="flex items-center justify-between border-t border-slate-200 pt-3 text-xs font-bold dark:border-slate-700"><span class="text-slate-500 dark:text-slate-400">Balance After Payment</span><span class="font-mono text-emerald-600 dark:text-emerald-400">₹'+inr2(S.wallet-fare.grand)+'</span></div>')
+        +'<button type="button" id="e-pay" class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-3.5 text-sm font-extrabold text-white shadow-lg"><i data-lucide="zap" class="h-4 w-4"></i> PAY INSTANTLY VIA IRCTC eWALLET</button></div>'
+        :'<div class="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/60"><div class="flex items-center justify-between"><span class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">Card Details</span><button type="button" id="e-fillcard" class="text-xs font-bold text-amber-600 hover:underline dark:text-amber-400">Fill Test Card</button></div><div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Card Number</label><input id="e-cno" type="text" value="'+esc(S.cardNo)+'" placeholder="4532 8821 0041 9910" class="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-mono text-sm font-bold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white" /></div><div class="grid grid-cols-3 gap-3"><div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Expiry (MM/YY)</label><input id="e-cex" type="text" maxlength="5" value="'+esc(S.cardEx)+'" placeholder="08/29" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm font-bold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white" /></div><div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">CVV</label><input id="e-cvv" type="password" maxlength="4" value="'+esc(S.cardCvv)+'" placeholder="742" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm font-bold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white" /></div><div><label class="mb-1 block text-[11px] font-bold text-slate-500 dark:text-slate-400">Card Holder</label><input id="e-cnm" type="text" value="'+esc(S.cardNm)+'" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white" /></div></div><button type="button" id="e-pay" class="btn-tactile flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3.5 text-sm font-extrabold text-slate-950 shadow-lg">PAY ₹'+inr2(fare.grand)+' SECURELY</button></div>')
+      +'</div>';
+    }
+    m.innerHTML=
+    '<div class="mx-auto max-w-5xl px-3 py-5 sm:px-6 sm:py-8">'
+    +'<div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-3.5 shadow-sm '+(S.remSec<=25?'animate-urgent-pulse border-red-500/60 bg-red-500/15':'border-amber-500/35 bg-white dark:bg-[#111b2d]')+'"><div class="flex items-center gap-2.5"><i data-lucide="lock" class="h-4 w-4 text-emerald-500"></i><div><p class="text-xs font-extrabold text-slate-900 dark:text-white">IRCTC iPay Secure Payment Gateway</p><p class="text-[11px] text-slate-500 dark:text-slate-400">'+slot.train.no+' '+esc(slot.train.nm)+' • Class '+slot.cc+'</p></div></div><div class="flex items-center gap-4"><div class="text-right"><p class="text-[10px] font-bold uppercase text-slate-400">Payable Amount</p><p class="font-mono text-lg font-extrabold text-emerald-600 dark:text-emerald-400">₹'+inr2(fare.grand)+'</p></div><div id="pay-clock" class="flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-base font-extrabold tabular-nums '+(S.remSec<=25?'bg-red-600 text-white':'bg-[#1b365d] text-amber-300')+'"><i data-lucide="clock" class="h-4 w-4"></i>'+pad2(Math.floor(S.remSec/60))+':'+pad2(S.remSec%60)+'</div></div></div>'
+    +'<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111b2d]"><div class="grid grid-cols-3 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/70">'+tabs+'</div><div class="p-5 sm:p-7"><div id="e-err" class="hidden"></div>'+body+'</div></div></div>';
+    refreshIcons();
+    document.querySelectorAll('.ptbtn').forEach(b=>b.onclick=()=>{Sound.click();hideE();S.payTab=b.getAttribute('data-pt');S.otpScreen=false;paint();});
+    function hideE(){ const e=$('e-err'); e.className='hidden'; e.innerHTML=''; }
+    function showE(t){ const e=$('e-err'); e.className='mb-4 flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-600 dark:text-red-400'; e.innerHTML='<i data-lucide="alert-circle" class="mt-0.5 h-4 w-4 shrink-0"></i><span>'+esc(t)+'</span>'; refreshIcons(); }
+    window.__payErr=showE;
+    if(S.payTab==='UPI'){
+      $('e-upi').oninput=(e)=>{S.upiId=e.target.value;};
+      document.querySelectorAll('.sfxbtn').forEach(b=>b.onclick=()=>{Sound.click(); const p=(S.upiId.split('@')[0]||'tatkal.pro'); S.upiId=p+b.getAttribute('data-sfx'); $('e-upi').value=S.upiId;});
+      $('e-collect').onclick=()=>{ if(!S.upiId.includes('@')){Sound.error();showE('Enter a valid UPI ID (e.g., name@okaxis) or click QR Pay.');return;} hideE(); Sound.notify(); renderPush(); };
+      $('e-qrsim').onclick=()=>{ Sound.notify(); renderPush(); };
+    }
+    if(S.payTab==='NETBANKING'&&!S.otpScreen){
+      document.querySelectorAll('.bankbtn').forEach(b=>b.onclick=()=>{Sound.click();S.bank=b.getAttribute('data-bank');paint();});
+      const sel=$('e-bank sel'); if(sel) sel.onchange=(e)=>{S.bank=e.target.value;paint();};
+      $('e-bankgo').onclick=()=>{Sound.click();hideE();S.otpScreen=true;paint();};
+    }
+    if(S.payTab==='NETBANKING'&&S.otpScreen){
+      $('e-otp').oninput=(e)=>{S.otp=e.target.value.replace(/\D/g,'').slice(0,6);e.target.value=S.otp;};
+      $('e-otpgo').onclick=()=>{ if(!/^\d{6}$/.test((S.otp||'').trim())){Sound.error();showE('Please enter any 6-digit OTP or click Auto-Verify OTP.');return;} const bn=(BANKS.find(b=>b.id===S.bank)||{}).name||S.bank; startHandshake('NetBanking ('+bn+')',false); };
+      $('e-autootp').onclick=()=>{ S.otp='482910'; const bn=(BANKS.find(b=>b.id===S.bank)||{}).name||S.bank; startHandshake('NetBanking ('+bn+')',false); };
+      $('e-backbank').onclick=()=>{S.otpScreen=false;paint();};
+    }
+    if(S.payTab==='CARD_WALLET'){
+      $('e-wm').onclick=()=>{Sound.click();hideE();S.subMode='WALLET';paint();};
+      $('e-cm').onclick=()=>{Sound.click();hideE();S.subMode='CARD';paint();};
+      const tp=$('e-topup'); if(tp) tp.onclick=()=>{Sound.click();S.wallet+=5000;toast('₹5,000.00 credited to Virtual IRCTC eWallet!');paint();renderTopbar();};
+      const fc=$('e-fillcard'); if(fc) fc.onclick=()=>{Sound.click();S.cardNo='4532 8821 0041 9910';S.cardEx='08/29';S.cardCvv='742';paint();};
+      const cno=$('e-cno'); if(cno) cno.oninput=(e)=>{ const cl=e.target.value.replace(/\D/g,'').slice(0,16); S.cardNo=cl.replace(/(\d{4})(?=\d)/g,'$1 '); e.target.value=S.cardNo; };
+      const cex=$('e-cex'); if(cex) cex.oninput=(e)=>{S.cardEx=e.target.value;};
+      const cvv=$('e-cvv'); if(cvv) cvv.oninput=(e)=>{S.cardCvv=e.target.value.replace(/\D/g,'').slice(0,4);e.target.value=S.cardCvv;};
+      const cnm=$('e-cnm'); if(cnm) cnm.oninput=(e)=>{S.cardNm=e.target.value;};
+      $('e-pay').onclick=()=>{
+        hideE();
+        if(S.subMode==='WALLET'){ if(S.wallet<fare.grand){Sound.error();showE('Insufficient IRCTC eWallet balance (₹'+inr2(S.wallet)+'). Top up or pay via Card/UPI.');return;} startHandshake('IRCTC eWallet Express',true); return; }
+        const dig=(S.cardNo||'').replace(/\s+/g,'');
+        if(dig.length<15||!/^\d{2}\/\d{2}$/.test(S.cardEx||'')||(S.cardCvv||'').length<3){Sound.error();showE('Please verify Card Number, Expiry (MM/YY), and 3-digit CVV.');return;}
+        const net=dig.startsWith('4')?'VISA':dig.startsWith('5')?'Mastercard':'RuPay';
+        startHandshake(net+' •••• '+dig.slice(-4),false);
+      };
+    }
+  }
+  paint(); startSession();
+  if(INT.qr) clearInterval(INT.qr);
+  INT.qr=setInterval(()=>{ if(S.screen!=='PAYMENT'){clearInterval(INT.qr);delete INT.qr;return;} if(S.payTab==='UPI'&&S.qrSec>0){ S.qrSec--; const t=$('e-qrtime'); if(t) t.textContent=pad2(Math.floor(S.qrSec/60))+':'+pad2(S.qrSec%60); } },1000);
+}
+function renderPush(){
+  const fare=S.fare;
+  $('push-root').innerHTML='<div class="fixed right-4 bottom-4 left-4 z-50 mx-auto max-w-sm animate-slide-up rounded-2xl border border-emerald-500/40 bg-[#0f172a] p-4 text-white shadow-2xl ring-2 ring-emerald-500/30 sm:left-auto"><div class="flex items-start gap-3"><div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-slate-950"><i data-lucide="bell-ring" class="h-5 w-5 animate-bounce"></i></div><div class="flex-1"><div class="flex items-center justify-between"><span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400">UPI App Push Notification</span><span class="text-[10px] text-slate-400">now</span></div><p class="mt-1 text-sm font-bold">IRCTC Railways requests ₹'+inr2(fare.grand)+'</p><p class="text-[11px] text-slate-300">From: '+esc(S.upiId)+' • Tap Approve to authorize UPI PIN</p><div class="mt-3 flex gap-2"><button type="button" id="push-ok" class="btn-tactile flex-1 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-extrabold text-slate-950 hover:bg-emerald-400">✓ Approve &amp; Pay</button><button type="button" id="push-no" class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-700">Decline</button></div></div></div></div>';
+  refreshIcons();
+  $('push-ok').onclick=()=>{ $('push-root').innerHTML=''; startHandshake('UPI ('+S.upiId+')',false); };
+  $('push-no').onclick=()=>{ Sound.click(); $('push-root').innerHTML=''; };
+}
+function startHandshake(label,usedWallet){
+  $('push-root').innerHTML='';
+  const txn='IRCTC'+String(Date.now()).slice(-8)+Math.floor(10+Math.random()*89);
+  $('modal-root').innerHTML='<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md"><div class="animate-pop-in w-full max-w-md rounded-2xl border border-amber-500/30 bg-[#111b2d] p-6 text-white shadow-2xl"><div class="mb-5 flex items-center justify-center"><div class="relative flex h-16 w-16 items-center justify-center"><span class="absolute inset-0 animate-ping rounded-full bg-amber-500/30"></span><span class="h-14 w-14 animate-spin rounded-full border-4 border-amber-500 border-t-transparent"></span><i data-lucide="lock" class="absolute h-5 w-5 text-amber-400"></i></div></div><h3 class="text-center text-base font-extrabold">Processing Your Tatkal Transaction</h3><p class="mt-1 text-center text-xs text-slate-400">Do not press Back or Refresh browser window...</p><div class="mt-6 space-y-3" id="hs-nodes"></div></div></div>';
+  refreshIcons();
+  function nodes(st){ const items=[{s:1,t:'Connecting to payment gateway...'},{s:2,t:'Communicating with bank server...'},{s:3,t:'Locking berths & generating 10-digit PNR...'}];
+    $('hs-nodes').innerHTML=items.map(n=>{ const done=st>n.s, cur=st===n.s;
+      return '<div class="flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-xs font-bold transition '+(done?'border-emerald-500/40 bg-emerald-500/15 text-emerald-300':cur?'border-amber-500/50 bg-amber-500/15 text-amber-300':'border-slate-800 bg-slate-900/50 text-slate-500')+'">'+(done?'<i data-lucide="check-circle-2" class="h-4 w-4 shrink-0 text-emerald-400"></i>':cur?'<span class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-amber-400 border-t-transparent"></span>':'<span class="h-4 w-4 shrink-0 rounded-full border border-slate-600"></span>')+'<span>'+n.t+'</span></div>'; }).join(''); refreshIcons(); }
+  Sound.click(); nodes(1);
+  setTimeout(()=>{ if(S.screen!=='PAYMENT')return; nodes(2); Sound.tick(); },650);
+  setTimeout(()=>{ if(S.screen!=='PAYMENT')return; nodes(3); Sound.tick(); },1350);
+  setTimeout(()=>{ if(S.screen!=='PAYMENT')return; $('modal-root').innerHTML=''; completePayment(label,usedWallet,txn); },2050);
+}
+function completePayment(label,usedWallet,txn){
+  const slot=S.slot, fare=S.fare; if(!slot||!fare) return;
+  const total=(Date.now()-S.bookingStart)/1000, payS=S.payStart>0?(Date.now()-S.payStart)/1000:2.1, preset=DIFF[S.difficulty];
+  if(S.difficulty==='HARDCORE'&&S.criteria.quota==='CK'&&total>78&&Math.random()<0.45){
+    Sound.fail();
+    S.result={ok:false,reason:'QUOTA_EXHAUSTED',head:'Tatkal Berths Exhausted During Bank Handshake!',detail:'Payment authorized in '+total.toFixed(1)+'s, but rival bookings swept the remaining '+slot.cc+' Tatkal pool in '+preset.rival+'s! (Amount auto-refunded to source)',train:slot.train,cc:slot.cc,quota:S.criteria.quota,date:S.criteria.date,seats:[],fare:fare,m:{total:total,pax:S.paxSplit,hurdle:S.hurdleSec,pay:payS,srv:S.srvN,cap:S.capMiss,rival:preset.rival},at:new Date().toLocaleTimeString()};
+    S.streak=0; go('RESULT'); return;
+  }
+  if(usedWallet) S.wallet=Math.max(0,Number((S.wallet-fare.grand).toFixed(2)));
+  const pnr=genPNR(), seats=assignSeats(S.pax,slot.cc,slot.av);
+  Sound.success();
+  S.result={ok:true,pnr:pnr,txn:txn,method:label,train:slot.train,cc:slot.cc,quota:S.criteria.quota,date:S.criteria.date,seats:seats,fare:fare,m:{total:total,pax:S.paxSplit,hurdle:S.hurdleSec,pay:payS,srv:S.srvN,cap:S.capMiss,rival:preset.rival},at:new Date().toLocaleTimeString()};
+  S.streak++; S.best=(S.best==null?total:Math.min(S.best,total));
+  S.history.unshift({id:'h'+Date.now(),pnr:pnr,train:slot.train.no+' '+slot.train.nm,route:slot.train.fc+' → '+slot.train.tc,quota:S.criteria.quota,cls:slot.cc,ok:true,secs:total,fare:fare.grand,at:new Date().toLocaleTimeString()});
+  go('RESULT');
+}
+
+/* ================= SCREEN F : RESULT ================= */
+function downloadTicket(r){
+  if(!r.ok||!r.pnr) return;
+  const cv=document.createElement('canvas'); const W=920, H=590+r.seats.length*36;
+  cv.width=W; cv.height=H; const x=cv.getContext('2d'); if(!x) return;
+  x.fillStyle='#f8fafc'; x.fillRect(0,0,W,H);
+  x.strokeStyle='#1b365d'; x.lineWidth=4; x.strokeRect(12,12,W-24,H-24);
+  x.fillStyle='#1b365d'; x.fillRect(14,14,W-28,86);
+  x.fillStyle='#f59e0b'; x.fillRect(14,96,W-28,5);
+  x.fillStyle='#ffffff'; x.font='bold 24px Inter, sans-serif'; x.fillText('IRCTC ELECTRONIC RESERVATION SLIP (ERS)',38,52);
+  x.fillStyle='#fcd34d'; x.font='600 13px Inter, sans-serif'; x.fillText('IRCTC TATKAL EXPRESS SIMULATOR • INDIAN RAILWAYS',38,76);
+  x.fillStyle='#0f2544'; x.fillRect(W-260,26,224,58); x.strokeStyle='#f59e0b'; x.lineWidth=1.5; x.strokeRect(W-260,26,224,58);
+  x.fillStyle='#fbbf24'; x.font='600 11px Inter, sans-serif'; x.fillText('PNR NUMBER',W-244,46);
+  x.fillStyle='#ffffff'; x.font='bold 22px monospace'; x.fillText(r.pnr,W-244,72);
+  x.fillStyle='#ffffff'; x.fillRect(34,122,W-68,146); x.strokeStyle='#cbd5e1'; x.lineWidth=1; x.strokeRect(34,122,W-68,146);
+  x.fillStyle='#1b365d'; x.font='bold 19px Inter, sans-serif'; x.fillText(r.train.no+' — '+r.train.nm,54,154);
+  x.fillStyle='#475569'; x.font='600 13px Inter, sans-serif'; x.fillText('Date: '+r.date+'   |   Class: '+r.cc+'   |   Quota: '+r.quota+'   |   Distance: '+r.train.km+' km',54,180);
+  x.fillStyle='#0f172a'; x.font='bold 22px monospace'; x.fillText(r.train.fc+' ('+r.train.dep+')',54,222);
+  x.fillStyle='#d97706'; x.font='bold 16px Inter, sans-serif'; x.fillText('──────  '+r.train.dur+'  ──────▶',290,220);
+  x.fillStyle='#0f172a'; x.font='bold 22px monospace'; x.fillText(r.train.tc+' ('+r.train.arr+')',595,222);
+  x.fillStyle='#64748b'; x.font='500 12px Inter, sans-serif'; x.fillText(r.train.fn,54,245); x.fillText(r.train.tn,595,245);
+  let y=295; x.fillStyle='#1b365d'; x.font='bold 14px Inter, sans-serif'; x.fillText('PASSENGER & BERTH ALLOCATION DETAILS',34,y); y+=14;
+  x.fillStyle='#e2e8f0'; x.fillRect(34,y,W-68,32); x.fillStyle='#1e293b'; x.font='bold 12px Inter, sans-serif';
+  x.fillText('#',48,y+20); x.fillText('NAME',86,y+20); x.fillText('AGE / SEX',340,y+20); x.fillText('FOOD',450,y+20); x.fillText('BOOKING STATUS / COACH / BERTH',560,y+20); y+=32;
+  r.seats.forEach((s,i)=>{ x.fillStyle=i%2===0?'#ffffff':'#f8fafc'; x.fillRect(34,y,W-68,34); x.strokeStyle='#e2e8f0'; x.strokeRect(34,y,W-68,34);
+    x.fillStyle='#0f172a'; x.font='600 13px Inter, sans-serif'; x.fillText(String(i+1),48,y+22); x.fillText(s.nm,86,y+22); x.fillText(s.age+' / '+s.g[0],340,y+22); x.fillText(s.food.replace('_',' '),450,y+22);
+    x.fillStyle=s.st.indexOf('CNF')===0?'#059669':s.st.indexOf('RAC')===0?'#d97706':'#dc2626'; x.font='bold 13px monospace'; x.fillText(s.st,560,y+22); y+=34; });
+  y+=24; x.fillStyle='#ffffff'; x.fillRect(34,y,W-68,128); x.strokeStyle='#cbd5e1'; x.strokeRect(34,y,W-68,128);
+  x.fillStyle='#1b365d'; x.font='bold 14px Inter, sans-serif'; x.fillText('PAYMENT & FARE SUMMARY',54,y+28);
+  x.fillStyle='#334155'; x.font='500 13px Inter, sans-serif';
+  x.fillText('Base + Reservation + SF: ₹'+(r.fare.sub+r.fare.sr).toFixed(2),54,y+56);
+  x.fillText('Tatkal Charges: ₹'+r.fare.tt.toFixed(2),54,y+78);
+  x.fillText('IRCTC Convenience Fee + GST + Insurance: ₹'+(r.fare.conv+r.fare.gst+r.fare.ins).toFixed(2),54,y+100);
+  x.fillStyle='#0f172a'; x.font='bold 20px monospace'; x.fillText('TOTAL PAID: ₹'+r.fare.grand.toFixed(2),W-310,y+60);
+  x.fillStyle='#475569'; x.font='500 12px monospace'; x.fillText('TXN ID: '+(r.txn||'SIM-TXN-88412'),W-310,y+84); x.fillText('Speed: '+r.m.total.toFixed(1)+'s',W-310,y+104);
+  x.fillStyle='#64748b'; x.font='500 11px Inter, sans-serif'; x.fillText('Generated by IRCTC Tatkal Express Simulator — Simulated e-Ticket for Training & Entertainment Only.',34,H-26);
+  const a=document.createElement('a'); a.download='IRCTC_eTicket_PNR_'+r.pnr+'.png'; a.href=cv.toDataURL('image/png'); a.click();
+}
+function renderF(){
+  const m=$('main'), r=S.result; if(!r){ go('SEARCH'); return; }
+  if(!r.ok){
+    m.innerHTML='<div class="mx-auto max-w-4xl px-3 py-6 sm:px-6 sm:py-10"><div class="overflow-hidden rounded-2xl border border-red-500/40 bg-white shadow-2xl dark:bg-[#111b2d]"><div class="bg-gradient-to-r from-red-700 via-red-600 to-rose-700 px-6 py-7 text-white"><div class="flex flex-wrap items-center justify-between gap-4"><div class="flex items-center gap-3.5"><div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25"><i data-lucide="alert-octagon" class="h-8 w-8 text-amber-300"></i></div><div><span class="rounded-full bg-black/25 px-2.5 py-0.5 font-mono text-[11px] font-extrabold uppercase tracking-wider text-amber-300">BOOKING FAILED • '+esc(r.reason||'EXHAUSTED')+'</span><h1 class="mt-1.5 text-2xl font-extrabold tracking-tight">'+esc(r.head)+'</h1></div></div><div class="rounded-xl bg-black/25 px-4 py-2 text-right font-mono"><p class="text-[10px] uppercase text-red-200">Your Time</p><p class="text-xl font-extrabold text-white">'+r.m.total.toFixed(1)+'s</p></div></div></div>'
+    +'<div class="space-y-6 p-6"><div class="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-semibold text-red-700 dark:text-red-300">'+esc(r.detail)+'</div>'
+    +'<div><h2 class="mb-3 flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400"><i data-lucide="trending-up" class="h-4 w-4 text-amber-500"></i>Post-Mortem Failure Analytics</h2><div class="grid grid-cols-2 gap-3 sm:grid-cols-4">'
+    +'<div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60"><p class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Total Attempt</p><p class="mt-1 font-mono text-lg font-extrabold text-slate-900 dark:text-white">'+r.m.total.toFixed(1)+'s</p></div>'
+    +'<div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60"><p class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Rival Berths Filled</p><p class="mt-1 font-mono text-lg font-extrabold text-red-500">'+r.m.rival+'s</p></div>'
+    +'<div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60"><p class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Server Retries</p><p class="mt-1 font-mono text-lg font-extrabold text-amber-500">'+r.m.srv+'</p></div>'
+    +'<div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60"><p class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Captcha Errors</p><p class="mt-1 font-mono text-lg font-extrabold text-slate-900 dark:text-white">'+r.m.cap+'</p></div></div></div>'
+    +'<div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-slate-700 dark:text-amber-100"><p class="font-extrabold text-amber-700 dark:text-amber-300">⚡ Tatkal Speedrunner Tips for Next Run:</p><ul class="mt-2 list-disc space-y-1 pl-4"><li>Click <strong>“Auto-Fill All”</strong> from your Master List in the passenger screen to cut ~20 seconds.</li><li>Use <strong>IRCTC eWallet Express</strong> or <strong>UPI App Push</strong> for instant authorization.</li>'+(r.m.cap>0?'<li>Double-check uppercase vs lowercase characters in the Security Captcha.</li>':'')+'</ul></div>'
+    +'<div class="flex flex-wrap gap-3"><button type="button" id="f-retry" class="btn-tactile flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1b365d] to-[#274b80] px-5 py-3.5 text-sm font-extrabold text-white shadow-lg dark:from-amber-500 dark:to-orange-500 dark:text-slate-950"><i data-lucide="rotate-ccw" class="h-4 w-4"></i> RETRY TATKAL BOOKING</button></div></div></div></div>';
+    refreshIcons();
+    $('f-retry').onclick=()=>{ Sound.click(); S.slot=null; S.result=null; go('SEARCH'); };
+    return;
+  }
+  const pct=Math.min(99,Math.max(42,Math.round(100-r.m.total*0.9)));
+  const rows=r.seats.map((s,i)=>{ const cnf=s.st.indexOf('CNF')===0, rac=s.st.indexOf('RAC')===0;
+    return '<tr class="bg-white dark:bg-[#111b2d]"><td class="px-4 py-3 font-mono font-bold text-slate-500">'+(i+1)+'</td><td class="px-4 py-3 font-bold text-slate-900 dark:text-white">'+esc(s.nm)+'</td><td class="px-4 py-3 font-mono text-slate-600 dark:text-slate-300">'+s.age+' / '+s.g[0]+'</td><td class="px-4 py-3 text-slate-600 dark:text-slate-300">'+esc(s.food.replace('_',' '))+'</td><td class="px-4 py-3"><span class="inline-block rounded-md px-2.5 py-1 font-mono text-xs font-extrabold '+(cnf?'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400':rac?'bg-amber-500/15 text-amber-700 dark:text-amber-300':'bg-red-500/15 text-red-600 dark:text-red-400')+'">'+esc(s.st)+'</span></td></tr>'; }).join('');
+  m.innerHTML='<div class="mx-auto max-w-5xl px-3 py-5 sm:px-6 sm:py-8">'
+  +'<div class="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-600/20 via-emerald-500/10 to-amber-500/10 px-5 py-4 shadow-lg"><div class="flex items-center gap-3"><div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30"><i data-lucide="check-circle-2" class="h-7 w-7"></i></div><div><div class="flex items-center gap-2"><span class="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-950">Booking Confirmed</span><span class="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-300"><i data-lucide="sparkles" class="h-3.5 w-3.5"></i> Faster than '+pct+'% of contenders!</span></div><h1 class="mt-1 text-lg font-extrabold text-slate-900 sm:text-xl dark:text-white">Congratulations! Your IRCTC e-Ticket is Generated.</h1></div></div><div class="flex items-center gap-3 font-mono"><div class="rounded-xl border border-emerald-500/30 bg-white/80 px-3.5 py-2 text-center dark:bg-slate-900/80"><p class="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Checkout Speed</p><p class="text-base font-extrabold text-emerald-600 dark:text-emerald-400">'+r.m.total.toFixed(1)+'s</p></div><div class="rounded-xl border border-amber-500/30 bg-white/80 px-3.5 py-2 text-center dark:bg-slate-900/80"><p class="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Hurdles Cleared</p><p class="text-base font-extrabold text-amber-600 dark:text-amber-400">'+(r.m.srv+1)+'</p></div></div></div>'
+  +'<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700/80 dark:bg-[#111b2d]"><div class="border-b-4 border-amber-500 bg-gradient-to-r from-[#1b365d] via-[#224578] to-[#1b365d] px-6 py-5 text-white"><div class="flex flex-wrap items-center justify-between gap-4"><div class="flex items-center gap-3"><i data-lucide="train-front" class="h-7 w-7 text-amber-400"></i><div><p class="text-[11px] font-bold uppercase tracking-widest text-amber-300">Indian Railways • Electronic Reservation Slip (ERS)</p><h2 class="text-lg font-extrabold tracking-tight sm:text-xl">'+r.train.no+' — '+esc(r.train.nm)+'</h2></div></div><div class="flex items-center gap-3 rounded-xl border border-amber-400/50 bg-[#0e203b] px-4 py-2.5"><div><p class="text-[10px] font-bold uppercase tracking-wider text-amber-300">10-Digit PNR Number</p><p class="font-mono text-xl font-extrabold tracking-widest text-white">'+r.pnr+'</p></div><button type="button" id="f-copy" class="btn-tactile rounded-lg bg-white/10 p-2 text-amber-300 hover:bg-white/20" title="Copy PNR"><i data-lucide="copy" class="h-4 w-4"></i></button></div></div></div>'
+  +'<div class="p-5 sm:p-7 space-y-6"><div class="grid items-center gap-6 lg:grid-cols-12"><div class="space-y-4 lg:col-span-8"><div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60"><div><p class="text-[10px] font-bold uppercase text-slate-400">Boarding From</p><p class="font-mono text-xl font-extrabold text-[#1b365d] dark:text-white">'+r.train.fc+' <span class="text-amber-500">'+r.train.dep+'</span></p><p class="text-xs font-semibold text-slate-600 dark:text-slate-300">'+esc(r.train.fn)+'</p></div><div class="flex flex-col items-center text-center"><span class="inline-flex items-center gap-1 font-mono text-xs font-bold text-slate-500 dark:text-slate-400"><i data-lucide="clock" class="h-3.5 w-3.5 text-amber-500"></i>'+r.train.dur+'</span><div class="my-1 h-[2px] w-24 bg-gradient-to-r from-amber-500 to-emerald-500"></div><span class="font-mono text-[10px] text-slate-400">'+r.train.km+' km</span></div><div class="text-right"><p class="text-[10px] font-bold uppercase text-slate-400">Destination</p><p class="font-mono text-xl font-extrabold text-[#1b365d] dark:text-white">'+r.train.tc+' <span class="text-emerald-500">'+r.train.arr+'</span></p><p class="text-xs font-semibold text-slate-600 dark:text-slate-300">'+esc(r.train.tn)+'</p></div></div>'
+  +'<div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4"><div class="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"><p class="text-[10px] font-bold uppercase text-slate-400">Journey Date</p><p class="font-mono text-xs font-extrabold text-slate-900 dark:text-white">'+esc(r.date)+'</p></div><div class="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"><p class="text-[10px] font-bold uppercase text-slate-400">Class</p><p class="font-mono text-xs font-extrabold text-slate-900 dark:text-white">'+r.cc+'</p></div><div class="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"><p class="text-[10px] font-bold uppercase text-slate-400">Quota</p><p class="text-xs font-extrabold text-amber-600 dark:text-amber-400">'+QUOTA[r.quota].label+'</p></div><div class="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"><p class="text-[10px] font-bold uppercase text-slate-400">TXN ID</p><p class="truncate font-mono text-xs font-bold text-slate-900 dark:text-white">'+esc(r.txn||'')+'</p></div></div></div>'
+  +'<div class="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center lg:col-span-4 dark:border-slate-800 dark:bg-slate-900/60">'+qrSVG('PNR:'+r.pnr+'|TRN:'+r.train.no+'|DT:'+r.date+'|CLS:'+r.cc,132)+'<p class="mt-2 font-mono text-[11px] font-bold text-slate-600 dark:text-slate-300">Scan TTE Verification QR</p></div></div>'
+  +'<div><h3 class="mb-2.5 text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Passenger Status &amp; Berth Allocation</h3><div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800"><table class="w-full text-left text-xs"><thead class="bg-slate-100 text-[11px] font-extrabold uppercase text-slate-600 dark:bg-slate-800/80 dark:text-slate-300"><tr><th class="px-4 py-3">#</th><th class="px-4 py-3">Passenger Name</th><th class="px-4 py-3">Age / Sex</th><th class="px-4 py-3">Meal</th><th class="px-4 py-3">Current Status / Coach / Berth</th></tr></thead><tbody class="divide-y divide-slate-200 dark:divide-slate-800">'+rows+'</tbody></table></div></div>'
+  +'<div class="grid gap-5 md:grid-cols-2"><div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2 dark:border-slate-800 dark:bg-slate-900/50"><h4 class="font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">Official Fare Breakdown</h4><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Ticket Fare ('+r.fare.n+' pax)</span><span class="font-mono font-bold">₹'+inr2(r.fare.sub)+'</span></div>'+(r.fare.tt>0?'<div class="flex justify-between text-amber-600 dark:text-amber-400"><span>Tatkal Charges</span><span class="font-mono font-bold">₹'+inr2(r.fare.tt)+'</span></div>':'')+'<div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Superfast + Reservation</span><span class="font-mono font-bold">₹'+inr2(r.fare.sr)+'</span></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>IRCTC Convenience Fee + GST + Insurance</span><span class="font-mono font-bold">₹'+inr2(r.fare.conv+r.fare.gst+r.fare.ins)+'</span></div><div class="flex justify-between border-t border-slate-200 pt-2 text-sm font-extrabold text-slate-900 dark:border-slate-700 dark:text-white"><span>Total Paid ('+esc(r.method||'')+')</span><span class="font-mono text-emerald-600 dark:text-emerald-400">₹'+inr2(r.fare.grand)+'</span></div></div>'
+  +'<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2 dark:border-slate-800 dark:bg-slate-900/50"><h4 class="flex items-center gap-1.5 font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200"><i data-lucide="award" class="h-4 w-4 text-amber-500"></i> Tatkal Performance Breakdown</h4><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Passenger Form + Captcha</span><span class="font-mono font-bold">'+r.m.pax.toFixed(1)+'s</span></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Payment Gateway Handshake</span><span class="font-mono font-bold">'+r.m.pay.toFixed(1)+'s</span></div><div class="flex justify-between text-slate-600 dark:text-slate-300"><span>Server Retries / Captcha Mistakes</span><span class="font-mono font-bold">'+r.m.srv+' / '+r.m.cap+'</span></div><div class="flex justify-between border-t border-slate-200 pt-2 font-extrabold text-slate-900 dark:border-slate-700 dark:text-white"><span>Total Checkout Time</span><span class="font-mono text-amber-600 dark:text-amber-400">'+r.m.total.toFixed(1)+'s</span></div></div></div>'
+  +'<div class="flex flex-wrap gap-3 pt-2"><button type="button" id="f-dl" class="btn-tactile inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#1b365d] px-4 py-3 text-xs font-extrabold text-white shadow-md hover:bg-[#234578] sm:flex-none"><i data-lucide="download" class="h-4 w-4 text-amber-400"></i>Download e-Ticket (PNG)</button><button type="button" id="f-share" class="btn-tactile inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-extrabold text-slate-800 hover:bg-slate-50 sm:flex-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><i data-lucide="share-2" class="h-4 w-4 text-amber-500"></i><span id="f-share-t">Share PNR</span></button><div class="flex flex-1 flex-wrap justify-end gap-2.5"><button type="button" id="f-again" class="btn-tactile inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-xs font-extrabold text-white shadow hover:bg-emerald-500"><i data-lucide="rotate-ccw" class="h-4 w-4"></i> Play Again</button>'+(S.difficulty!=='HARDCORE'?'<button type="button" id="f-hard" class="btn-tactile inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 px-5 py-3 text-xs font-extrabold text-white shadow hover:brightness-110"><i data-lucide="flame" class="h-4 w-4"></i> Try Hardcore Mode</button>':'')+'</div></div>'
+  +'</div></div></div>';
+  refreshIcons();
+  $('f-copy').onclick=async()=>{ Sound.click(); try{ await navigator.clipboard.writeText(r.pnr); toast('PNR '+r.pnr+' copied!'); }catch(e){ toast('PNR: '+r.pnr); } };
+  $('f-dl').onclick=()=>{ Sound.click(); downloadTicket(r); };
+  $('f-share').onclick=async()=>{ Sound.click(); const txt='IRCTC Tatkal Express e-Ticket\nPNR: '+r.pnr+'\nTrain: '+r.train.no+' '+r.train.nm+'\nRoute: '+r.train.fc+' ('+r.train.dep+') → '+r.train.tc+' ('+r.train.arr+')\nDate: '+r.date+' | Class: '+r.cc+' | Quota: '+r.quota+'\nStatus: '+(r.seats[0]?r.seats[0].st:'CNF')+'\nBooked in '+r.m.total.toFixed(1)+'s!';
+    try{ if(navigator.share){ await navigator.share({title:'IRCTC PNR '+r.pnr,text:txt}); } else { await navigator.clipboard.writeText(txt); $('f-share-t').textContent='Copied PNR Summary!'; setTimeout(()=>{const t=$('f-share-t'); if(t) t.textContent='Share PNR';},2200); } }catch(e){ try{ await navigator.clipboard.writeText(txt); $('f-share-t').textContent='Copied PNR Summary!'; }catch(_){} } };
+  $('f-again').onclick=()=>{ Sound.click(); S.slot=null; S.result=null; go('SEARCH'); };
+  const fh=$('f-hard'); if(fh) fh.onclick=()=>{ Sound.click(); S.difficulty='HARDCORE'; S.slot=null; S.result=null; toast('Switched to HARDCORE Tatkal Chaos Mode! Good luck!'); go('SEARCH'); };
+}
+
+/* ================= MASTER LIST MODAL ================= */
+function renderMasterModal(){
+  const r=$('modal-root');
+  const list=S.master.length===0?'<div class="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">No passengers saved. Add one below for 1-click Tatkal auto-fill!</div>':'<div class="grid gap-2 sm:grid-cols-2">'+S.master.map(p=>'<div class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 dark:border-slate-700/70 dark:bg-slate-800/60"><div class="min-w-0"><p class="truncate text-sm font-bold text-slate-900 dark:text-white">'+esc(p.name)+'</p><p class="text-xs text-slate-500 dark:text-slate-400">'+p.age+' yrs • '+p.gender+' • '+esc(p.berth.replace('_',' '))+' • '+esc(p.food.replace('_',' '))+'</p></div><button type="button" data-del="'+p.id+'" class="mdel ml-2 rounded-lg p-1.5 text-red-500 hover:bg-red-500/10"><i data-lucide="trash-2" class="h-4 w-4"></i></button></div>').join('')+'</div>';
+  r.innerHTML='<div class="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 backdrop-blur-sm sm:items-center sm:p-4"><div class="animate-slide-up w-full max-w-2xl overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl dark:border-slate-700/80 dark:bg-[#111b2d]"><div class="flex justify-center pt-2.5 sm:hidden"><div class="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-slate-600"></div></div>'
+  +'<div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800"><div class="flex items-center gap-2.5"><div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1b365d] text-amber-400"><i data-lucide="user-check" class="h-5 w-5"></i></div><div><h2 class="text-base font-bold text-slate-900 dark:text-white">IRCTC Master Passenger List</h2><p class="text-xs text-slate-500 dark:text-slate-400">Save travellers beforehand for 1-click Tatkal auto-fill!</p></div></div><button type="button" id="mm-x" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"><i data-lucide="x" class="h-5 w-5"></i></button></div>'
+  +'<div class="max-h-[74vh] overflow-y-auto p-5 space-y-5"><div class="space-y-2"><h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Saved Passengers ('+S.master.length+'/6)</h3>'+list+'</div>'
+  +(S.master.length<6?'<form id="mm-form" class="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3 dark:border-slate-700/80 dark:bg-slate-900/50"><h3 class="text-xs font-bold uppercase tracking-wider text-[#1b365d] dark:text-amber-400">Add New Traveller</h3><div id="mm-err" class="hidden"></div><div class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div class="sm:col-span-2"><label class="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-300">Full Name (as per ID)</label><input id="mm-name" type="text" placeholder="e.g. Vikramaditya Rao" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white" /></div><div><label class="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-300">Age</label><input id="mm-age" type="number" min="1" max="110" value="28" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white" /></div></div>'
+  +'<div class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div><label class="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-300">Gender</label><select id="mm-g" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Transgender</option></select></div><div><label class="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-300">Berth Preference</label><select id="mm-b" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="NO_PREF">No Preference</option><option value="LOWER">Lower</option><option value="MIDDLE">Middle</option><option value="UPPER">Upper</option><option value="SIDE_LOWER">Side Lower</option><option value="SIDE_UPPER">Side Upper</option></select></div><div><label class="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-300">Food Choice</label><select id="mm-f" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="VEG">Veg Meal</option><option value="NON_VEG">Non-Veg Meal</option><option value="NO_FOOD">No Food</option></select></div></div>'
+  +'<button type="submit" class="btn-tactile inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1b365d] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#234578] dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"><i data-lucide="plus" class="h-4 w-4"></i> Save to Master List</button></form>':'')
+  +'</div></div></div>';
+  refreshIcons();
+  $('mm-x').onclick=()=>{Sound.click();r.innerHTML='';};
+  document.querySelectorAll('.mdel').forEach(b=>b.onclick=()=>{Sound.click();S.master=S.master.filter(x=>x.id!==b.getAttribute('data-del'));toast('Passenger removed from Master List.');renderMasterModal();renderTopbar();});
+  const f=$('mm-form'); if(f) f.onsubmit=(e)=>{ e.preventDefault(); const nm=$('mm-name').value.trim(), ag=parseInt($('mm-age').value,10);
+    const er=$('mm-err'); function eShow(t){ er.className='rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400'; er.textContent=t; }
+    er.className='hidden'; er.textContent='';
+    if(nm.length<2){Sound.error();eShow('Enter passenger full name (min 2 characters).');return;}
+    if(isNaN(ag)||ag<1||ag>110){Sound.error();eShow('Enter valid age between 1 and 110.');return;}
+    Sound.click(); S.master.push({id:'mp-'+Date.now(),name:nm,age:ag,gender:$('mm-g').value,berth:$('mm-b').value,food:$('mm-f').value});
+    toast(nm+' added to Master List!'); renderMasterModal(); renderTopbar(); };
+}
+
+/* ================= ABANDON MODAL ================= */
+function renderAbandon(){
+  const r=$('modal-root');
+  r.innerHTML='<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"><div class="animate-pop-in w-full max-w-sm rounded-2xl border border-amber-500/40 bg-white p-5 shadow-2xl dark:bg-[#111b2d]"><div class="flex items-center gap-2.5 text-amber-500"><i data-lucide="alert-triangle" class="h-6 w-6 shrink-0"></i><h3 class="text-base font-extrabold text-slate-900 dark:text-white">Abandon Active Booking?</h3></div><p class="mt-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">Leaving this screen will immediately release your locked Tatkal berth slot and cancel the active checkout timer. Are you sure?</p><div class="mt-5 flex gap-2.5"><button type="button" id="ab-stay" class="btn-tactile flex-1 rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Stay &amp; Finish</button><button type="button" id="ab-go" class="btn-tactile flex-1 rounded-xl bg-red-600 px-3 py-2.5 text-xs font-extrabold text-white hover:bg-red-500">Release Slot</button></div></div></div>';
+  refreshIcons();
+  $('ab-stay').onclick=()=>{Sound.click();S.abandonTo=null;r.innerHTML='';};
+  $('ab-go').onclick=()=>{Sound.click();const t=S.abandonTo;S.abandonTo=null;r.innerHTML='';if(t==='LOGIN')S.loggedIn=false;go(t||'SEARCH');};
+}
+
+/* ================= MASTER RENDER ================= */
+function render(){ applyTheme(); renderTopbar(); $('modal-root').innerHTML='';
+  if(S.screen==='LOGIN') renderA();
+  else if(S.screen==='SEARCH') renderB();
+  else if(S.screen==='TRAINS') renderC();
+  else if(S.screen==='PASSENGER'){ if(!S.slot){go('SEARCH');return;} renderD(); }
+  else if(S.screen==='PAYMENT'){ if(!S.slot||!S.fare){go('SEARCH');return;} renderE(); }
+  else if(S.screen==='RESULT') renderF();
+  refreshIcons();
+}
+document.addEventListener('DOMContentLoaded',()=>{ applyTheme(); render(); });
+</script>
+</body>
+</html>
